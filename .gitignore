@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+/backend/node_modules
+/frontend/node_modules
+
+# Environment variables (IMPORTANT: Never commit these!)
+.env
+.env.local
+.env.production
+.env.development
+backend/.env
+frontend/.env
+
+# Build outputs
+/backend/dist
+/frontend/dist
+/frontend/build
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma
+/backend/prisma/dev.db
+/backend/prisma/migrations
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Test files
+coverage/
+.nyc_output/
+
+# Scripts with hardcoded credentials
+check-metafield.js
+fetch-product.js
+push-price-breakdown.js
+push-correct-breakdown.js
+verify-liquid-parsing.js
+check-metafield-level.js
+
+# Any other sensitive files
+secrets.json
+credentials.json
