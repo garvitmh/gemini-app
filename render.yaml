@@ -9,7 +9,7 @@ services:
   - type: web
     name: gemini-backend
     runtime: node
-    plan: free
+    # plan: free
     rootDir: backend
     buildCommand: npm install && npx prisma generate
     startCommand: npx prisma migrate deploy && node src/server-simple.js
@@ -38,7 +38,7 @@ services:
   - type: web
     name: gemini-frontend
     runtime: static
-    plan: free
+    # plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
