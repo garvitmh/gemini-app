@@ -645,8 +645,11 @@ export default function Products() {
             // setShowEditModal(false); // REMOVED
             await fetchProducts(); // Wait for refresh to sync updated price
             setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (error) {
-            console.error('Error updating product:', error);
+        } catch (err: any) {
+            console.error('Error updating product:', err);
+            const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Unknown error';
+            setError(`Update failed: ${msg}`);
+            setSuccessMessage('');
         } finally {
             setLoading(false);
         }
@@ -662,38 +665,43 @@ export default function Products() {
     const handleImportProducts = async () => {
         if (!importFile) return;
         setLoading(true);
+        setImportResult(null);
 
-        // Convert file to Base64
-        const reader = new FileReader();
-        reader.readAsDataURL(importFile);
-        reader.onload = async () => {
-            const base64Data = (reader.result as string).split(',')[1];
-            const fileType = importFile.name.endsWith('.csv') ? 'csv' : 'xlsx';
+        try {
+            const formData = new FormData();
+            formData.append('file', importFile);
 
-            try {
-                // Send as JSON with Base64 data (matches backend expectation)
-                const response = await api.post('/products/import', {
-                    fileData: base64Data,
-                    fileType: fileType
+            // Send as multipart/form-data
+            const response = await api.post('/products/import', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            if (response.data.success) {
+                setImportResult({
+                    updatedCount: response.data.updatedCount,
+                    errors: response.data.errors || []
                 });
-
-                setImportResult(response.data);
-                if (response.data.success) {
-                    setSuccessMessage(`Imported ${response.data.imported} products successfully!`);
-                    fetchProducts();
-                }
-            } catch (error) {
-                console.error('Import error:', error);
-                setSuccessMessage('Import failed');
-            } finally {
-                setLoading(false);
+                setSuccessMessage(`Imported ${response.data.updatedCount} products successfully!`);
+                fetchProducts();
+            } else {
+                setImportResult({
+                    updatedCount: 0,
+                    errors: [{ sku: 'ERROR', error: response.data.error?.message || 'Import failed' }]
+                });
             }
-        };
-        reader.onerror = () => {
-            console.error('File reading failed');
+        } catch (error: any) {
+            console.error('Import error:', error);
+            const errorMsg = error.response?.data?.error?.message || error.userMessage || 'Import failed';
+            setSuccessMessage(errorMsg);
+            setImportResult({
+                updatedCount: 0,
+                errors: [{ sku: 'MASTER_FAIL', error: errorMsg }]
+            });
+        } finally {
             setLoading(false);
-            setSuccessMessage('Failed to read file');
-        };
+        }
     };
 
     const handleExport = (format: 'csv' | 'xlsx') => {
@@ -974,7 +982,7 @@ export default function Products() {
                     <Layout.Section>
                         <Banner
                             tone="critical"
-                            title="Error loading products"
+                            title={error.includes('Update failed') ? "Update Error" : "Error loading products"}
                             action={{ content: 'Retry', onAction: fetchProducts }}
                             onDismiss={() => setError('')}
                         >

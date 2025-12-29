@@ -1,0 +1,5 @@
+SKU,Title,weightGrams,metal,karat,makingChargeType,makingChargeValue,CurrentPrice,gemstone_1_type,gemstone_1_cut,gemstone_1_color,gemstone_1_clarity,gemstone_1_weight,gemstone_1_pieces,gemstone_2_type,gemstone_2_cut,gemstone_2_color,gemstone_2_clarity,gemstone_2_weight,gemstone_2_pieces,gemstone_3_type,gemstone_3_cut,gemstone_3_color,gemstone_3_clarity,gemstone_3_weight,gemstone_3_pieces,gemstones_json
+GOLD-RING-001,Gold Diamond Ring,5.5,gold,22,per_gram,1500,,diamond,Excellent,D,VS1,0.5,1,,,,,,,,,,,,,
+GOLD-NECKLACE-002,Gold Necklace with Ruby,25,gold,18,per_gram,1400,,ruby,Very Good,Red,VS2,1.2,3,,,,,,,,,,,,,
+SILVER-BRACELET-003,Silver Bracelet,15,silver,925,per_gram,80,,,,,,,,,,,,,,,,,,,,
+GOLD-EARRING-004,Gold Earrings with Diamond & Emerald,6.8,gold,18,per_gram,1450,,diamond,Excellent,F,VVS1,0.3,2,emerald,Good,Green,VS1,0.4,2,,,,,,,

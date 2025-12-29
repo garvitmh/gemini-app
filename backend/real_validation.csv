@@ -1,0 +1,5 @@
+SKU,Title,weightGrams,metal,karat,makingChargeType,makingChargeValue,CurrentPrice,gemstone_1_type,gemstone_1_cut,gemstone_1_color,gemstone_1_clarity,gemstone_1_weight,gemstone_1_pieces,gemstone_2_type,gemstone_2_cut,gemstone_2_color,gemstone_2_clarity,gemstone_2_weight,gemstone_2_pieces,gemstone_3_type,gemstone_3_cut,gemstone_3_color,gemstone_3_clarity,gemstone_3_weight,gemstone_3_pieces,gemstones_json
+CIR-20.7-4,BRACELET 18K Validated,15.5,gold,18,per_gram,1200,,,,,,,,,,,,,,,,,,,,[]
+SANDEEP12,Bracelet- Plain Gold 22K Validated,10.2,gold,22,per_gram,1500,,,,,,,,,,,,,,,,,,,,[]
+CBRA-T10-11,CAHIN BRACELET 22K Validated,8.4,gold,22,per_gram,1500,,,,,,,,,,,,,,,,,,,,[]
+41.91CT-125PC,DIAMOND RING 14K Validated,4.5,gold,14,per_piece,5000,,diamond,Round,F,VS1,0.5,1,,,,,,,,,,,,,[]

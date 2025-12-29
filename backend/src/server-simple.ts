@@ -6,6 +6,8 @@ import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import multer from 'multer';
 import * as xlsx from 'xlsx';
+import fs from 'fs';
+import path from 'path';
 import { BulkPriceUpdateService } from './services/bulkPriceUpdate.service';
 
 const PORT = process.env.PORT || 3000;
@@ -403,22 +405,62 @@ const generateBreakdownHtml = (breakdown: any) => {
 };
 
 // Helper to push to Shopify & Log History
+const LOG_FILE = 'd:\\Kshitiz\\Sandeep sir plugin\\gemini-app\\gemini-app\\backend\\forensic_diagnostic.log';
+const forensicLog = (msg: string) => {
+    const timestamp = new Date().toISOString();
+    const formattedMsg = `[${timestamp}] ${msg}\n`;
+    console.log(msg);
+    try {
+        fs.appendFileSync(LOG_FILE, formattedMsg);
+    } catch (e) {
+        console.error('Failed to write to forensic log:', e);
+    }
+};
+
 // Helper to push to Shopify & Log History
 // Refactored to remove internal DB logging and accept oldPrice explicitly
-const pushToShopify = async (product: any, price: number, breakdown: any, oldPrice: number | null) => {
+const pushToShopify = async (shopDomain: string, accessToken: string, product: any, price: number, breakdown: any, oldPrice: number | null) => {
     try {
+        // Objective 2: Verify Shopify IDs before update
+        if (!product.shopifyProductId || !product.shopifyVariantId) {
+            console.error(`❌ [SYNC AUDIT] Missing IDs for ${product.sku || 'Unknown Product'}`);
+            return { success: false, error: "Missing Shopify Product/Variant ID - cannot sync price" };
+        }
+
         const variantId = product.shopifyVariantId.replace('gid://shopify/ProductVariant/', '');
         const productId = product.shopifyProductId.replace('gid://shopify/Product/', '');
 
-        console.log(`\n🔄 Pushing ${product.sku} to Shopify...`);
-        console.log(`   Variant ID: ${variantId}`);
-        console.log(`   Product ID: ${productId}`);
-        console.log(`   New Price: ₹${price.toFixed(2)}`);
+        const variantPutUrl = `https://${shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
+        const productGetUrl = `https://${shopDomain}/admin/api/2024-01/products/${productId}.json`;
+
+        forensicLog(`\n🔍 [FORENSIC SYNC AUDIT] Starting verification for ${product.sku || 'Unknown'}`);
+        forensicLog(`   Target Shop: ${shopDomain}`);
+        forensicLog(`   Product ID: ${productId}`);
+        forensicLog(`   Variant ID: ${variantId}`);
+        forensicLog(`   Price to send: ₹${price.toFixed(2)}`);
+        forensicLog(`   PUT URL: ${variantPutUrl}`);
+
+        // Objective 2: Verify Variant Belongs to Product
+        forensicLog(`   [FORENSIC] Step 0: Cross-verifying variant ownership...`);
+        const ownershipCheckRes = await axios.get(productGetUrl, {
+            headers: { 'X-Shopify-Access-Token': accessToken }
+        });
+
+        const remoteVariants = ownershipCheckRes.data.product.variants || [];
+        const variantExists = remoteVariants.some((v: any) => v.id.toString() === variantId);
+
+        if (!variantExists) {
+            console.error(`   ❌ [FORENSIC] ALARM: Variant ${variantId} NOT FOUND in Product ${productId}`);
+            const availableIds = remoteVariants.map((v: any) => v.id).join(', ');
+            console.error(`      Available IDs for this product: ${availableIds}`);
+            return { success: false, error: "Variant ID does not belong to this product" };
+        }
+        forensicLog(`   ✅ [FORENSIC] Ownership confirmed.`);
 
         // 1. Update Variant Price & Metafields
-        console.log(`   Step 1: Updating variant price and metafield...`);
-        await axios.put(
-            `https://${SHOPIFY_STORE}/admin/api/2024-01/variants/${variantId}.json`,
+        forensicLog(`   [FORENSIC] Step 1: Updating variant price and metafields...`);
+        const variantRes = await axios.put(
+            variantPutUrl,
             {
                 variant: {
                     id: parseInt(variantId),
@@ -441,19 +483,26 @@ const pushToShopify = async (product: any, price: number, breakdown: any, oldPri
             },
             {
                 headers: {
-                    'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+                    'X-Shopify-Access-Token': accessToken,
                     'Content-Type': 'application/json',
                 },
             }
         );
-        console.log(`   ✅ Variant updated successfully`);
+        forensicLog(`   [FORENSIC] ✅ Step 1 Success: HTTP ${variantRes.status}`);
+
+        // Objective 3: Confirm Shopify Response Effect
+        const updatedVariant = variantRes.data.variant;
+        forensicLog(`   [FORENSIC] Shopify Sync Result:`);
+        forensicLog(`      Final Variant ID: ${updatedVariant.id}`);
+        forensicLog(`      Final Price: ${updatedVariant.price}`);
+        forensicLog(`      Final Compare At Price: ${updatedVariant.compare_at_price}`);
 
         // 2. Fetch Product to get current Description
-        console.log(`   Step 2: Fetching product description...`);
+        forensicLog(`   [FORENSIC] Step 2: Fetching product description...`);
         const productRes = await axios.get(
-            `https://${SHOPIFY_STORE}/admin/api/2024-01/products/${productId}.json`,
+            productGetUrl,
             {
-                headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
+                headers: { 'X-Shopify-Access-Token': accessToken }
             }
         );
 
@@ -466,17 +515,17 @@ const pushToShopify = async (product: any, price: number, breakdown: any, oldPri
         const regex = /<!-- GEMS_PRICE_BREAKDOWN_START -->[\s\S]*?<!-- GEMS_PRICE_BREAKDOWN_END -->/;
         if (regex.test(currentHtml)) {
             newBodyHtml = currentHtml.replace(regex, newTableHtml);
-            console.log(`   📝 Replacing existing price breakdown in description`);
+            forensicLog(`   📝 Replacing existing price breakdown in description`);
         } else {
             newBodyHtml = currentHtml + newTableHtml;
-            console.log(`   📝 Appending price breakdown to description`);
+            forensicLog(`   📝 Appending price breakdown to description`);
         }
 
         // 3. Update Product Description
         if (newBodyHtml !== currentHtml) {
-            console.log(`   Step 3: Updating product description...`);
-            await axios.put(
-                `https://${SHOPIFY_STORE}/admin/api/2024-01/products/${productId}.json`,
+            forensicLog(`   [FORENSIC] Step 3: Updating product description...`);
+            const descRes = await axios.put(
+                productGetUrl,
                 {
                     product: {
                         id: parseInt(productId),
@@ -485,12 +534,14 @@ const pushToShopify = async (product: any, price: number, breakdown: any, oldPri
                 },
                 {
                     headers: {
-                        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+                        'X-Shopify-Access-Token': accessToken,
                         'Content-Type': 'application/json',
                     },
                 }
             );
-            console.log(`   ✅ Description updated successfully`);
+            forensicLog(`   [FORENSIC] ✅ Step 3 Success: HTTP ${descRes.status}`);
+        } else {
+            forensicLog(`   [FORENSIC] Step 3: Skipped (Description unchanged)`);
         }
 
         console.log(`✅ Successfully pushed ${product.sku} to Shopify\n`);
@@ -1069,66 +1120,167 @@ app.get('/api/products/template', async (req, res) => {
     try {
         const format = (req.query.format as string) || 'xlsx';
 
-        // Sample data with different product types
-        const sampleData = [
-            {
-                SKU: 'GOLD-RING-001',
-                Title: 'Sample Gold Ring with Diamond',
-                weightGrams: 5.5,
-                metal: 'gold',
-                karat: 22,
-                gemstones_json: JSON.stringify([{
-                    gemstoneType: 'diamond',
-                    gemstoneCut: 'Excellent',
-                    gemstoneColor: 'D',
-                    gemstoneClarity: 'VS1',
-                    gemstoneWeight: 0.5,
-                    gemstonePieces: 1
-                }]),
-                makingChargeType: 'per_gram',
-                makingChargeValue: 1500,
-                CurrentPrice: ''
-            },
-            {
-                SKU: 'GOLD-NECKLACE-002',
-                Title: 'Sample Gold Necklace with Multiple Rubies',
-                weightGrams: 25.0,
-                metal: 'gold',
-                karat: 18,
-                gemstones_json: JSON.stringify([
-                    {
-                        gemstoneType: 'ruby',
-                        gemstoneCut: 'Excellent',
-                        gemstoneClarity: 'VS2',
-                        gemstoneWeight: 1.0,
-                        gemstonePieces: 3
-                    },
-                    {
-                        gemstoneType: 'diamond',
-                        gemstoneCut: 'Very Good',
-                        gemstoneClarity: 'SI1',
-                        gemstoneWeight: 0.25,
-                        gemstonePieces: 5
-                    }
-                ]),
-                makingChargeType: 'percent',
-                makingChargeValue: 15,
-                CurrentPrice: ''
-            },
-            {
-                SKU: 'SILVER-BRACELET-003',
-                Title: 'Sample Silver Bracelet (No Gemstones)',
-                weightGrams: 15.0,
-                metal: 'silver',
-                karat: 925,
-                gemstones_json: '',
-                makingChargeType: 'flat',
-                makingChargeValue: 500,
-                CurrentPrice: ''
-            }
-        ];
+        // Headers for the template
+        const headers = {
+            SKU: 'Example: GOLD-RING-001',
+            Title: 'Example: Gold Ring with Diamond',
+            weightGrams: 'Example: 5.5',
+            metal: 'Example: gold',
+            karat: 'Example: 22',
+            makingChargeType: 'per_gram/percent/flat',
+            makingChargeValue: 'Example: 1500',
+            CurrentPrice: '(Read-only)',
+            gemstone_1_type: 'diamond',
+            gemstone_1_cut: 'Excellent',
+            gemstone_1_color: 'D',
+            gemstone_1_clarity: 'VS1',
+            gemstone_1_weight: 0.5,
+            gemstone_1_pieces: 1,
+            gemstone_2_type: '',
+            gemstone_2_cut: '',
+            gemstone_2_color: '',
+            gemstone_2_clarity: '',
+            gemstone_2_weight: '',
+            gemstone_2_pieces: '',
+            gemstone_3_type: '',
+            gemstone_3_cut: '',
+            gemstone_3_color: '',
+            gemstone_3_clarity: '',
+            gemstone_3_weight: '',
+            gemstone_3_pieces: '',
+            gemstones_json: '(Optional: Only if you need more than 3 gemstones)'
+        };
 
-        const worksheet = xlsx.utils.json_to_sheet(sampleData);
+        // Note row for merchants
+        const note = {
+            SKU: 'NOTE:',
+            Title: 'Fill gemstone columns directly. Supports up to 3 gemstones. Leave blank if not applicable.',
+            weightGrams: '',
+            metal: '',
+            karat: '',
+            makingChargeType: '',
+            makingChargeValue: '',
+            CurrentPrice: 'Auto-calculated. Do not edit.',
+            gemstone_1_type: '',
+            gemstone_1_cut: '',
+            gemstone_1_color: '',
+            gemstone_1_clarity: '',
+            gemstone_1_weight: '',
+            gemstone_1_pieces: '',
+            gemstone_2_type: '',
+            gemstone_2_cut: '',
+            gemstone_2_color: '',
+            gemstone_2_clarity: '',
+            gemstone_2_weight: '',
+            gemstone_2_pieces: '',
+            gemstone_3_type: '',
+            gemstone_3_cut: '',
+            gemstone_3_color: '',
+            gemstone_3_clarity: '',
+            gemstone_3_weight: '',
+            gemstone_3_pieces: '',
+            gemstones_json: ''
+        };
+
+        // Real Sample Row 1: Gold Ring
+        const sampleGold = {
+            SKU: 'GOLD-RING-001',
+            Title: 'Sample 22K Gold Ring',
+            weightGrams: 5.5,
+            metal: 'gold',
+            karat: 22,
+            makingChargeType: 'per_gram',
+            makingChargeValue: 1500,
+            CurrentPrice: '',
+            gemstone_1_type: 'diamond',
+            gemstone_1_cut: 'Excellent',
+            gemstone_1_color: 'D',
+            gemstone_1_clarity: 'VS1',
+            gemstone_1_weight: 0.5,
+            gemstone_1_pieces: 1,
+            gemstone_2_type: '',
+            gemstone_2_cut: '',
+            gemstone_2_color: '',
+            gemstone_2_clarity: '',
+            gemstone_2_weight: '',
+            gemstone_2_pieces: '',
+            gemstone_3_type: '',
+            gemstone_3_cut: '',
+            gemstone_3_color: '',
+            gemstone_3_clarity: '',
+            gemstone_3_weight: '',
+            gemstone_3_pieces: '',
+            gemstones_json: ''
+        };
+
+        // Real Sample Row 2: Silver Bracelet
+        const sampleSilver = {
+            SKU: 'SILVER-BRACE-001',
+            Title: 'Sample 925 Silver Bracelet',
+            weightGrams: 15.0,
+            metal: 'silver',
+            karat: 925,
+            makingChargeType: 'flat',
+            makingChargeValue: 500,
+            CurrentPrice: '',
+            gemstone_1_type: '',
+            gemstone_1_cut: '',
+            gemstone_1_color: '',
+            gemstone_1_clarity: '',
+            gemstone_1_weight: '',
+            gemstone_1_pieces: '',
+            gemstone_2_type: '',
+            gemstone_2_cut: '',
+            gemstone_2_color: '',
+            gemstone_2_clarity: '',
+            gemstone_2_weight: '',
+            gemstone_2_pieces: '',
+            gemstone_3_type: '',
+            gemstone_3_cut: '',
+            gemstone_3_color: '',
+            gemstone_3_clarity: '',
+            gemstone_3_weight: '',
+            gemstone_3_pieces: '',
+            gemstones_json: ''
+        };
+
+        // Actual Headers (Column Names)
+        const columnNames = {
+            SKU: 'SKU',
+            Title: 'Title',
+            weightGrams: 'weightGrams',
+            metal: 'metal',
+            karat: 'karat',
+            makingChargeType: 'makingChargeType',
+            makingChargeValue: 'makingChargeValue',
+            CurrentPrice: 'CurrentPrice',
+            gemstone_1_type: 'gemstone_1_type',
+            gemstone_1_cut: 'gemstone_1_cut',
+            gemstone_1_color: 'gemstone_1_color',
+            gemstone_1_clarity: 'gemstone_1_clarity',
+            gemstone_1_weight: 'gemstone_1_weight',
+            gemstone_1_pieces: 'gemstone_1_pieces',
+            gemstone_2_type: 'gemstone_2_type',
+            gemstone_2_cut: 'gemstone_2_cut',
+            gemstone_2_color: 'gemstone_2_color',
+            gemstone_2_clarity: 'gemstone_2_clarity',
+            gemstone_2_weight: 'gemstone_2_weight',
+            gemstone_2_pieces: 'gemstone_2_pieces',
+            gemstone_3_type: 'gemstone_3_type',
+            gemstone_3_cut: 'gemstone_3_cut',
+            gemstone_3_color: 'gemstone_3_color',
+            gemstone_3_clarity: 'gemstone_3_clarity',
+            gemstone_3_weight: 'gemstone_3_weight',
+            gemstone_3_pieces: 'gemstone_3_pieces',
+            gemstones_json: 'gemstones_json'
+        };
+
+        const combinedData = [columnNames, headers, note, sampleGold, sampleSilver];
+        const worksheet = xlsx.utils.json_to_sheet(combinedData, { skipHeader: true });
+
+        // UX Improvement: Freeze panes (Header + 2 instructional rows = 3 rows total)
+        worksheet['!freeze'] = { xSplit: 0, ySplit: 3 };
+
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Products Template');
 
@@ -1162,36 +1314,36 @@ app.get('/api/products/export', async (req, res) => {
             orderBy: { title: 'asc' },
         });
 
-        const data = products.map(p => ({
-            SKU: p.sku,
-            Title: p.title,
-            weightGrams: p.weightGrams,
-            metal: p.metal,
-            karat: p.karat,
-            gemstones_json: p.gemstones && p.gemstones.length > 0
-                ? JSON.stringify(p.gemstones.map(g => ({
-                    gemstoneType: g.gemstoneType,
-                    gemstoneCut: g.gemstoneCut,
-                    gemstoneColor: g.gemstoneColor,
-                    gemstoneClarity: g.gemstoneClarity,
-                    gemstoneCaratRange: g.gemstoneCaratRange,
-                    gemstoneWeight: g.gemstoneWeight,
-                    gemstonePieces: g.gemstonePieces,
-                    discountType: g.discountType,
-                    discountValue: g.discountValue
-                })))
-                : '',
-            gemstoneType: p.gemstoneType,
-            gemstoneCut: p.gemstoneCut,
-            gemstoneColor: p.gemstoneColor,
-            gemstoneClarity: p.gemstoneClarity,
-            gemstoneCaratRange: p.gemstoneCaratRange,
-            manualGemstonePrice: p.manualGemstonePrice,
-            isManualGemstonePrice: p.isManualGemstonePrice ? 'Yes' : 'No',
-            makingChargeType: p.makingChargeType,
-            makingChargeValue: p.makingChargeValue,
-            CurrentPrice: p.currentPrice
-        }));
+        const data = products.map(p => {
+            const exportRow: any = {
+                SKU: p.sku,
+                Title: p.title,
+                weightGrams: p.weightGrams,
+                metal: p.metal,
+                karat: p.karat,
+                makingChargeType: p.makingChargeType,
+                makingChargeValue: p.makingChargeValue,
+                CurrentPrice: p.currentPrice
+            };
+
+            // Expand up to 3 gemstones
+            for (let i = 0; i < 3; i++) {
+                const gem = p.gemstones && p.gemstones[i];
+                exportRow[`gemstone_${i + 1}_type`] = gem?.gemstoneType || '';
+                exportRow[`gemstone_${i + 1}_cut`] = gem?.gemstoneCut || '';
+                exportRow[`gemstone_${i + 1}_color`] = gem?.gemstoneColor || '';
+                exportRow[`gemstone_${i + 1}_clarity`] = gem?.gemstoneClarity || '';
+                exportRow[`gemstone_${i + 1}_weight`] = gem?.gemstoneWeight || '';
+                exportRow[`gemstone_${i + 1}_pieces`] = gem?.gemstonePieces || '';
+            }
+
+            // Hidden JSON for safety/extended data
+            exportRow.gemstones_json = p.gemstones && p.gemstones.length > 0
+                ? JSON.stringify(p.gemstones)
+                : '';
+
+            return exportRow;
+        });
 
         const worksheet = xlsx.utils.json_to_sheet(data);
         const workbook = xlsx.utils.book_new();
@@ -1216,6 +1368,10 @@ app.get('/api/products/export', async (req, res) => {
 
 // Import products from CSV/Excel
 app.post('/api/products/import', upload.single('file'), async (req: any, res) => {
+    let rowIndex = 0;
+    let currentRow: any = null;
+    let normalizedRow: any = null;
+
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
@@ -1229,12 +1385,33 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
         // Parse file
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
-        const rows: any[] = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        const sheet = workbook.Sheets[sheetName];
 
-        console.log(`📂 Processing import file: ${req.file.originalname} (${rows.length} rows)`);
+        // PHASE 2: Header Contract Assertion
+        const rawRows: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+        const actualHeaders = rawRows[0] || [];
+        const expectedHeaders = [
+            'SKU', 'Title', 'weightGrams', 'metal', 'karat',
+            'makingChargeType', 'makingChargeValue', 'CurrentPrice',
+            'gemstone_1_type', 'gemstone_1_cut', 'gemstone_1_color', 'gemstone_1_clarity', 'gemstone_1_weight', 'gemstone_1_pieces',
+            'gemstone_2_type', 'gemstone_2_cut', 'gemstone_2_color', 'gemstone_2_clarity', 'gemstone_2_weight', 'gemstone_2_pieces',
+            'gemstone_3_type', 'gemstone_3_cut', 'gemstone_3_color', 'gemstone_3_clarity', 'gemstone_3_weight', 'gemstone_3_pieces',
+            'gemstones_json'
+        ];
 
+        console.log('🔍 [DIAGNOSTIC] Actual Headers:', actualHeaders);
+        console.log('🔍 [DIAGNOSTIC] Expected Headers:', expectedHeaders);
+
+        for (const expected of expectedHeaders) {
+            if (!actualHeaders.includes(expected)) {
+                throw new Error(`Header mismatch: Missing expected column "${expected}". Received: ${JSON.stringify(actualHeaders)}`);
+            }
+        }
+
+        const rows: any[] = xlsx.utils.sheet_to_json(sheet);
         let updatedCount = 0;
         let errors: any[] = [];
+        let firstDataRowProcessed = false;
 
         // Get metal rates once for lookup
         const metalRates = await prisma.metalRate.findMany({
@@ -1249,13 +1426,51 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
             defaultDiscount: 0,
         };
 
+        // Helper for safe numeric conversion
+        const toNum = (val: any) => {
+            if (val === undefined || val === null || String(val).trim() === '') return null;
+            const n = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? null : n;
+        };
+
+        const toInt = (val: any) => {
+            if (val === undefined || val === null || String(val).trim() === '') return null;
+            const n = parseInt(String(val).replace(/[^0-9-]/g, ''), 10);
+            return isNaN(n) ? null : n;
+        };
+
         for (const row of rows) {
+            rowIndex++;
+            currentRow = row;
             const sku = row.sku || row.SKU || row.Sku;
+
             if (!sku) continue;
+
+            // SAFETY CHECK: Skip instructional rows
+            const skuStr = String(sku);
+            if (skuStr.startsWith('Example:') || skuStr === 'NOTE:' || skuStr === 'SKU' || skuStr.includes('(Read-only)')) {
+                continue;
+            }
+
+            // PHASE 3: Required Field Assertions (First Data Row)
+            if (!firstDataRowProcessed) {
+                console.log(`🔍 [DIAGNOSTIC] Asserting first data row (SKU: ${skuStr})`);
+                if (!row.metal) throw new Error(`PHASE 3: Missing required field "metal" in row ${rowIndex}`);
+                if (row.karat === undefined || row.karat === null) throw new Error(`PHASE 3: Missing required field "karat" in row ${rowIndex}`);
+                if (row.weightGrams === undefined || row.weightGrams === null) throw new Error(`PHASE 3: Missing required field "weightGrams" in row ${rowIndex}`);
+
+                const kVal = toInt(row.karat);
+                if (kVal === null) throw new Error(`PHASE 3: Invalid "karat" value "${row.karat}" in row ${rowIndex} (expected valid number)`);
+
+                const wVal = toNum(row.weightGrams);
+                if (wVal === null) throw new Error(`PHASE 3: Invalid "weightGrams" value "${row.weightGrams}" in row ${rowIndex} (expected valid number)`);
+
+                firstDataRowProcessed = true;
+            }
 
             try {
                 // Find product by SKU
-                const product = await prisma.product.findFirst({ where: { shopId: shop.id, sku: String(sku) } });
+                const product = await prisma.product.findFirst({ where: { shopId: shop.id, sku: skuStr } });
 
                 if (!product) {
                     errors.push({ sku, error: 'Product not found' });
@@ -1264,10 +1479,19 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
 
                 // Prepare update data
                 const updateData: any = {};
-                // Helper to normalize keys? simple check for now
-                if (row.weightGrams !== undefined) updateData.weightGrams = parseFloat(row.weightGrams);
-                if (row.metal !== undefined) updateData.metal = row.metal;
-                if (row.karat !== undefined) updateData.karat = parseInt(row.karat);
+                normalizedRow = updateData;
+
+                // Numeric Normalization
+                if (row.weightGrams !== undefined) updateData.weightGrams = toNum(row.weightGrams);
+                if (row.metal !== undefined) updateData.metal = String(row.metal).trim().toLowerCase();
+                if (row.karat !== undefined) updateData.karat = toInt(row.karat);
+                if (row.Title || row.title) updateData.title = String(row.Title || row.title).trim();
+
+                // Making charge handling
+                if (row.makingChargeType !== undefined) updateData.makingChargeType = row.makingChargeType;
+                if (row.makingChargeValue !== undefined) updateData.makingChargeValue = toNum(row.makingChargeValue);
+
+                // Gemstone fields (legacy support)
                 if (row.gemstoneType !== undefined) updateData.gemstoneType = row.gemstoneType;
                 if (row.gemstoneCut !== undefined) updateData.gemstoneCut = row.gemstoneCut;
                 if (row.gemstoneColor !== undefined) updateData.gemstoneColor = row.gemstoneColor;
@@ -1276,22 +1500,75 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
 
                 // Manual overrides
                 if (row.manualGemstonePrice !== undefined) {
-                    updateData.manualGemstonePrice = parseFloat(row.manualGemstonePrice);
-                    updateData.isManualGemstonePrice = true;
+                    const price = toNum(row.manualGemstonePrice);
+                    if (price !== null) {
+                        updateData.manualGemstonePrice = price;
+                        updateData.isManualGemstonePrice = true;
+                    }
                 }
 
                 // Update product in DB
                 const updatedProduct = await prisma.product.update({
                     where: { id: product.id },
-                    data: updateData
+                    data: updateData,
+                    include: { shop: true }
                 });
 
-                // Handle gemstones if gemstones_json column is present
-                if (row.gemstones_json !== undefined) {
+                // Handle gemstones (Expanded Columns + JSON Fallback)
+                // PHASE 3: Gemstone Column Handling Fix
+                const hasExpandedColumns = Object.keys(row).some(k => k.startsWith('gemstone_') && k.endsWith('_type'));
+                const hasJsonColumn = row.gemstones_json !== undefined;
+
+                if (rowIndex === 4) { // Log for a sample row
+                    console.log(`🔍 [DIAGNOSTIC] Gemstone path for SKU ${skuStr}: hasExpanded=${hasExpandedColumns}, hasJson=${hasJsonColumn}`);
+                }
+
+                const reconstructedGemstones: any[] = [];
+                if (hasExpandedColumns) {
+                    for (let i = 1; i <= 3; i++) {
+                        const type = row[`gemstone_${i}_type`];
+                        if (type && String(type).trim() !== '' && !String(type).startsWith('Example:')) {
+                            reconstructedGemstones.push({
+                                gemstoneType: String(type).trim(),
+                                gemstoneCut: row[`gemstone_${i}_cut`] ? String(row[`gemstone_${i}_cut`]).trim() : null,
+                                gemstoneColor: row[`gemstone_${i}_color`] ? String(row[`gemstone_${i}_color`]).trim() : null,
+                                gemstoneClarity: row[`gemstone_${i}_clarity`] ? String(row[`gemstone_${i}_clarity`]).trim() : null,
+                                gemstoneWeight: toNum(row[`gemstone_${i}_weight`]),
+                                gemstonePieces: toInt(row[`gemstone_${i}_pieces`]),
+                            });
+                        }
+                    }
+                }
+
+                // Resolve final gemstones array
+                let finalGemstones = reconstructedGemstones;
+
+                // If NOT using expanded columns OR expanded were empty, check gemstones_json
+                if (!hasExpandedColumns || reconstructedGemstones.length === 0) {
+                    if (row.gemstones_json && String(row.gemstones_json).trim() !== '' && !String(row.gemstones_json).startsWith('(Optional')) {
+                        try {
+                            const parsed = JSON.parse(row.gemstones_json);
+                            if (Array.isArray(parsed)) {
+                                finalGemstones = parsed;
+                            }
+                        } catch (e: any) {
+                        }
+                    }
+                }
+
+                // Gating: Only update gemstones if at least one gemstone column was present
+                const shouldUpdateGemstones = hasExpandedColumns || hasJsonColumn;
+
+                if (shouldUpdateGemstones && !Array.isArray(finalGemstones)) {
+                    throw new Error(`PHASE 4: finalGemstones is not an array for SKU ${skuStr}`);
+                }
+
+                // 3. Process the resolved gemstones
+                if (shouldUpdateGemstones && finalGemstones && Array.isArray(finalGemstones)) {
                     // Delete existing gemstones
                     await prisma.productGemstone.deleteMany({ where: { productId: product.id } });
 
-                    // Clear legacy gemstone fields
+                    // Clear legacy gemstone fields on the product itself
                     await prisma.product.update({
                         where: { id: product.id },
                         data: {
@@ -1308,38 +1585,31 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                         },
                     });
 
-                    // Parse and create new gemstones if any
-                    if (row.gemstones_json && row.gemstones_json.trim() !== '') {
-                        try {
-                            const gemstones = JSON.parse(row.gemstones_json);
-                            if (Array.isArray(gemstones) && gemstones.length > 0) {
-                                for (const gem of gemstones) {
-                                    await prisma.productGemstone.create({
-                                        data: {
-                                            productId: product.id,
-                                            gemstoneType: gem.gemstoneType,
-                                            gemstoneCut: gem.gemstoneCut || null,
-                                            gemstoneColor: gem.gemstoneColor || null,
-                                            gemstoneClarity: gem.gemstoneClarity || null,
-                                            gemstoneCaratRange: gem.gemstoneCaratRange || null,
-                                            gemstoneWeight: gem.gemstoneWeight ? parseFloat(gem.gemstoneWeight) : null,
-                                            gemstonePieces: gem.gemstonePieces ? parseInt(gem.gemstonePieces) : null,
-                                            discountType: gem.discountType || null,
-                                            discountValue: gem.discountValue ? parseFloat(gem.discountValue) : null,
-                                        }
-                                    });
-                                }
+                    // Create new gemstones
+                    for (const gem of finalGemstones) {
+                        if (!gem.gemstoneType) continue; // Skip if no type
+
+                        await prisma.productGemstone.create({
+                            data: {
+                                productId: product.id,
+                                gemstoneType: gem.gemstoneType,
+                                gemstoneCut: gem.gemstoneCut || null,
+                                gemstoneColor: gem.gemstoneColor || null,
+                                gemstoneClarity: gem.gemstoneClarity || null,
+                                gemstoneCaratRange: gem.gemstoneCaratRange || null,
+                                gemstoneWeight: toNum(gem.gemstoneWeight),
+                                gemstonePieces: toInt(gem.gemstonePieces),
+                                discountType: gem.discountType || null,
+                                discountValue: toNum(gem.discountValue),
                             }
-                        } catch (parseError) {
-                            console.error(`Error parsing gemstones_json for SKU ${sku}:`, parseError);
-                        }
+                        });
                     }
                 }
 
                 // Re-fetch product with gemstones for price calculation
                 const productWithGemstones = await prisma.product.findUnique({
                     where: { id: product.id },
-                    include: { gemstones: true },
+                    include: { gemstones: true, shop: true },
                 });
 
                 if (productWithGemstones && productWithGemstones.weightGrams && productWithGemstones.metal) {
@@ -1391,7 +1661,7 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                         });
 
                         // Push to Shopify (async sync)
-                        const shopifyResult = await pushToShopify(productWithGemstones, newPrice, breakdown, oldPrice);
+                        const shopifyResult = await pushToShopify(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN, productWithGemstones, newPrice, breakdown, oldPrice);
                         if (!shopifyResult.success) {
                             await prisma.priceHistory.create({
                                 data: {
@@ -1411,18 +1681,30 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                 await logAudit(shop.id, 'bulk_import', 'product', product.id, { oldValue: {}, newValue: updateData }, 'Bulk Import via File');
 
                 updatedCount++;
-                if (updatedCount % 10 === 0) await new Promise(r => setTimeout(r, 200));
-
-            } catch (err: any) {
-                console.error(`Error processing SKU ${sku}:`, err);
-                errors.push({ sku, error: err.message });
+            } catch (rowError: any) {
+                console.error(`❌ [DIAGNOSTIC] Row ${rowIndex} individual error for SKU ${skuStr}:`, rowError);
+                errors.push({ sku: skuStr, error: rowError.message });
+                throw rowError; // Bubble up to master catch for Phase 1
             }
         }
 
         res.json({ success: true, updatedCount, errors });
-    } catch (error: any) {
-        console.error('Import error:', error);
-        res.status(500).json({ error: 'Failed to process import file' });
+
+    } catch (masterError: any) {
+        // PHASE 1: HARD FAIL WITH EXPLICIT ERROR
+        console.error('🛑 [FORENSIC HARD FAIL] Master Error Stack:', masterError.stack);
+        console.error('🛑 [FORENSIC HARD FAIL] At Row Index:', rowIndex);
+        console.error('🛑 [FORENSIC HARD FAIL] Raw Row:', JSON.stringify(currentRow, null, 2));
+        console.error('🛑 [FORENSIC HARD FAIL] Normalized Row:', JSON.stringify(normalizedRow, null, 2));
+
+        res.status(500).json({
+            success: false,
+            error: {
+                message: masterError.message,
+                row: rowIndex,
+                stack: masterError.stack
+            }
+        });
     }
 });
 
@@ -1438,13 +1720,8 @@ app.put('/api/products/:id', async (req, res) => {
             stonePieces, stoneWeightCarat
         } = req.body;
 
-        const shop = await prisma.shop.findFirst({ include: { settings: true } });
-        if (!shop) {
-            return res.status(404).json({ error: 'Shop not found' });
-        }
+        forensicLog(`\n--- [FORENSIC ENDPOINT TRACE] Update attempt for product ${id} ---`);
 
-        // 1. Fetch current product state to get the AUTHENTIC oldPrice
-        // This must be done right before the update to avoid race conditions
         const existingProduct = await prisma.product.findUnique({
             where: { id },
             include: { gemstones: true }
@@ -1452,6 +1729,15 @@ app.put('/api/products/:id', async (req, res) => {
 
         if (!existingProduct) {
             return res.status(404).json({ error: 'Product not found' });
+        }
+
+        const shop = await prisma.shop.findUnique({
+            where: { id: existingProduct.shopId },
+            include: { settings: true }
+        });
+
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
         }
 
         const oldPrice = existingProduct.currentPrice;
@@ -1482,6 +1768,7 @@ app.put('/api/products/:id', async (req, res) => {
                 gemstoneDiscountType: req.body.gemstoneDiscountType || null,
                 gemstoneDiscountValue: req.body.gemstoneDiscountValue !== undefined ? parseFloat(req.body.gemstoneDiscountValue) : null,
             },
+            include: { shop: true }
         });
 
         // 3. Handle gemstones separately if provided
@@ -1521,6 +1808,8 @@ app.put('/api/products/:id', async (req, res) => {
             include: { gemstones: true },
         });
 
+        forensicLog(`   Step 1: WeightGrams=${productWithGemstones?.weightGrams}, Metal=${productWithGemstones?.metal}`);
+
         let newPrice = oldPrice;
         let breakdown: any = null;
 
@@ -1531,6 +1820,7 @@ app.put('/api/products/:id', async (req, res) => {
             });
 
             if (metalRate) {
+                forensicLog(`   Step 2: MetalRate found! Rate=${metalRate.ratePerGram}`);
                 const settings = shop.settings || {
                     defaultMakingChargeType: 'per_gram', defaultMakingChargeValue: 1500,
                     defaultWastagePct: 2, defaultGstPct: 3, defaultDiscount: 0
@@ -1583,8 +1873,12 @@ app.put('/api/products/:id', async (req, res) => {
                 console.log(`✅ Calculated and logged price for ${product.sku}: ₹${newPrice.toFixed(2)}`);
 
                 // 6. Push to Shopify (Async Sync)
-                // We do this AFTER the transaction. If Shopify fails, we can add a separate failure log.
-                const shopifyResult = await pushToShopify(product, newPrice, breakdown, oldPrice);
+                // Objective 1: Resolve shop domain dynamically
+                const shopDomain = res.locals.shopify?.session?.shop || shop.domain;
+                const dbShop = await prisma.shop.findUnique({ where: { domain: shopDomain } });
+                const accessToken = dbShop?.accessToken || SHOPIFY_ACCESS_TOKEN;
+
+                const shopifyResult = await pushToShopify(shopDomain, accessToken, product, newPrice, breakdown, oldPrice);
 
                 if (!shopifyResult.success) {
                     await prisma.priceHistory.create({
@@ -1597,9 +1891,20 @@ app.put('/api/products/:id', async (req, res) => {
                             triggeredBy: 'manual_update'
                         } as any
                     });
+
+                    // Objective 3: Surface Shopify sync errors to UI
+                    return res.status(500).json({
+                        success: false,
+                        error: shopifyResult.error,
+                        message: `Shopify sync failed: ${shopifyResult.error}`
+                    });
                 }
 
-                res.json({ success: true, product: { ...product, currentPrice: newPrice } });
+                res.json({
+                    success: true,
+                    product: { ...product, currentPrice: newPrice },
+                    syncStatus: 'synced'
+                });
             } else {
                 res.json({ success: true, product, message: 'Metal rate missing, price not updated' });
             }
@@ -1892,7 +2197,7 @@ app.post('/api/settings/apply-to-all', async (req, res) => {
                 });
 
                 // Push to Shopify
-                const shopifyResult = await pushToShopify(product, newPrice, breakdown, oldPrice);
+                const shopifyResult = await pushToShopify(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN, product, newPrice, breakdown, oldPrice);
                 if (!shopifyResult.success) {
                     await prisma.priceHistory.create({
                         data: {
