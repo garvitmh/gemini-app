@@ -1,3 +1,34 @@
+# System Checkpoint: discount-breakdown-fix-stable
+
+**Date:** 2025-12-29
+**Commit Label:** `checkpoint/discount-breakdown-fix-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after implementing the fix for Price Breakdown discrepancies. The backend now correctly interprets discount overrides from the frontend, and the frontend sends the complete discount payload.
+
+### Verified Stable Features
+1.  **Price Calculation Engine**
+    - [x] Backend `/calculate-price` endpoint updated to accept `metalDiscountType`, `makingDiscountType`, `gemstoneDiscountType`, etc.
+    - [x] `server-simple.ts` correctly applies these overrides during preview calculation.
+    - [x] Forensic logging added to `calculateProductPrice` for detailed discount tracing.
+2.  **Frontend Price Breakdown**
+    - [x] "Edit Product" modal sends all current discount field states to backend.
+    - [x] Strikethrough and "Sale" badges logic aligned with Shopify store design.
+    - [x] Subtotal and Final Price calculations match website logic.
+
+## 🔄 Rollback Procedure
+
+If a future update introduces regression:
+
+1.  **Identify Checkpoint**
+    - Find the commit labeled `checkpoint/discount-breakdown-fix-stable`.
+2.  **Revert**
+    - usage: `git reset --hard <commit-hash>`
+3.  **Verify**
+    - Open "Edit Product" for a discounted item.
+    - Check Price Breakdown for "Sale" badges and correct total.
+---
+
 # System Checkpoint: shopify-sync-fix-stable
 
 **Date:** 2025-12-29

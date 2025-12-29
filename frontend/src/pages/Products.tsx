@@ -429,6 +429,16 @@ export default function Products() {
                 manualGemstonePrice: product.manualGemstonePrice,
                 makingChargeType: product.makingChargeType,
                 makingChargeValue: product.makingChargeValue,
+                metalDiscountType: product.metalDiscountType,
+                metalDiscountValue: product.metalDiscountValue,
+                makingDiscountType: product.makingDiscountType,
+                makingDiscountValue: product.makingDiscountValue,
+                gemstoneDiscountType: product.gemstoneDiscountType,
+                gemstoneDiscountValue: product.gemstoneDiscountValue,
+                enamelColor: product.enamelColor,
+                enamelWeightGrams: product.enamelWeightGrams,
+                enamelDiscountType: product.enamelDiscountType,
+                enamelDiscountValue: product.enamelDiscountValue,
                 gemstones: gemstonesToSend,
             });
             console.log('fetchPriceBreakdown - response gemstones:', response.data.breakdown?.gemstone_details);
@@ -463,6 +473,16 @@ export default function Products() {
                 manualGemstonePrice: editManualGemstonePrice,
                 makingChargeType: editMakingChargeType || undefined,
                 makingChargeValue: editMakingChargeValue && parseFloat(editMakingChargeValue) > 0 ? parseFloat(editMakingChargeValue) : undefined,
+                metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
+                metalDiscountValue: editMetalDiscountValue ? parseFloat(editMetalDiscountValue) : null,
+                makingDiscountType: editMakingDiscountType !== 'none' ? editMakingDiscountType : null,
+                makingDiscountValue: editMakingDiscountValue ? parseFloat(editMakingDiscountValue) : null,
+                gemstoneDiscountType: editGemstoneDiscountType !== 'none' ? editGemstoneDiscountType : null,
+                gemstoneDiscountValue: editGemstoneDiscountValue ? parseFloat(editGemstoneDiscountValue) : null,
+                enamelColor: editEnamelColor,
+                enamelWeightGrams: editEnamelWeightGrams ? parseFloat(editEnamelWeightGrams) : null,
+                enamelDiscountType: editEnamelDiscountType !== 'none' ? editEnamelDiscountType : null,
+                enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
                 gemstones: productGemstones,
             });
             console.log('Price breakdown response:', response.data.breakdown);
@@ -747,7 +767,20 @@ export default function Products() {
                     manualGemstonePrice: editManualGemstonePrice,
                     makingChargeType: editMakingChargeType,
                     makingChargeValue: editMakingChargeValue,
-                    gemstones: productGemstones, // Include gemstones array
+                    metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
+                    metalDiscountValue: editMetalDiscountValue ? parseFloat(editMetalDiscountValue) : null,
+                    makingDiscountType: editMakingDiscountType !== 'none' ? editMakingDiscountType : null,
+                    makingDiscountValue: editMakingDiscountValue ? parseFloat(editMakingDiscountValue) : null,
+                    gemstoneDiscountType: editGemstoneDiscountType !== 'none' ? editGemstoneDiscountType : null,
+                    gemstoneDiscountValue: editGemstoneDiscountValue ? parseFloat(editGemstoneDiscountValue) : null,
+                    enamelColor: editEnamelColor,
+                    enamelWeightGrams: editEnamelWeightGrams ? parseFloat(editEnamelWeightGrams) : null,
+                    enamelDiscountType: editEnamelDiscountType !== 'none' ? editEnamelDiscountType : null,
+                    enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
+                    gemstones: productGemstones.map(g => ({
+                        ...g,
+                        discountValue: g.discountValue ? parseFloat(g.discountValue.toString()) : null,
+                    })), // Include gemstones array with parsed values
                 });
 
                 if (response.data.breakdown) {
@@ -775,6 +808,10 @@ export default function Products() {
         editStonePieces, editStoneWeight,
         editIsManualGemstonePrice, editManualGemstoneWeight, editManualGemstonePrice,
         editMakingChargeType, editMakingChargeValue,
+        editMetalDiscountType, editMetalDiscountValue,
+        editMakingDiscountType, editMakingDiscountValue,
+        editGemstoneDiscountType, editGemstoneDiscountValue,
+        editEnamelColor, editEnamelWeightGrams, editEnamelDiscountType, editEnamelDiscountValue,
         productGemstones, // Add gemstones to dependency array
     ]);
 
@@ -1369,7 +1406,7 @@ export default function Products() {
                         </Card>
 
                         <>
-                            <Text as="h3" variant="headingMd">Price Breakdown</Text>
+                            <Text as="h3" variant="headingMd">Price Breakdown (Updated)</Text>
                             <Card>
                                 {priceBreakdown ? (
                                     <>
@@ -1430,57 +1467,75 @@ export default function Products() {
                                                             </td>
                                                         </tr>
                                                         {priceBreakdown.gemstone_details?.type === 'multiple' && (priceBreakdown.gemstone_details as any).gemstones ? (
-                                                            (priceBreakdown.gemstone_details as any).gemstones.map((gem: any, idx: number) => (
-                                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f2f3' }}>
-                                                                    <td style={{ padding: '8px 16px' }}>
-                                                                        {gem.type.charAt(0).toUpperCase() + gem.type.slice(1)} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
-                                                                        {gem.hasDiscount && <Badge tone="critical">Sale</Badge>}
-                                                                        {gem.rateNotSet ? (
-                                                                            <div style={{ color: '#d72c0d', fontSize: '12px', fontWeight: 600 }}>
-                                                                                ⚠️ Rate not set - Add in Rates page
-                                                                            </div>
-                                                                        ) : gem.weight && (
-                                                                            <div style={{ color: '#6d7175', fontSize: '12px' }}>
-                                                                                {gem.weight}ct × ₹{((gem.cost / gem.weight) || 0).toLocaleString()}/ct
-                                                                            </div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td style={{ padding: '8px 16px', textAlign: 'right' }}>
-                                                                        {gem.rateNotSet ? (
-                                                                            <span style={{ color: '#d72c0d' }}>₹0.00</span>
-                                                                        ) : (
-                                                                            <>
-                                                                                {gem.hasDiscount && (
-                                                                                    <div style={{ textDecoration: 'line-through', color: '#8c9196', fontSize: '12px' }}>
-                                                                                        ₹{(gem.cost / 100).toFixed(2)}
-                                                                                    </div>
-                                                                                )}
-                                                                                ₹{(gem.finalCost / 100).toFixed(2)}
-                                                                            </>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            ))
+                                                            (priceBreakdown.gemstone_details as any).gemstones.map((gem: any, idx: number) => {
+                                                                // CZ EXCEPTION: Show in grams if type is CZ Cubic Zirconia
+                                                                const gemTypeSafe = (gem.type || '').toLowerCase();
+                                                                const isCZ = gemTypeSafe.includes('cubic zirconia') || gemTypeSafe.includes('cz');
+                                                                const weightUnit = isCZ ? 'gm' : 'ct';
+                                                                const rateUnit = isCZ ? 'gm' : 'ct';
+
+                                                                return (
+                                                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f2f3' }}>
+                                                                        <td style={{ padding: '8px 16px' }}>
+                                                                            {gem.type.charAt(0).toUpperCase() + gem.type.slice(1)} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
+                                                                            {gem.hasDiscount && <Badge tone="critical">Sale</Badge>}
+                                                                            {gem.rateNotSet ? (
+                                                                                <div style={{ color: '#d72c0d', fontSize: '12px', fontWeight: 600 }}>
+                                                                                    ⚠️ Rate not set - Add in Rates page
+                                                                                </div>
+                                                                            ) : gem.weight && (
+                                                                                <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                    {gem.weight}{weightUnit} × ₹{((gem.cost / 100 / gem.weight) || 0).toLocaleString()}/{rateUnit}
+                                                                                </div>
+                                                                            )}
+                                                                        </td>
+                                                                        <td style={{ padding: '8px 16px', textAlign: 'right' }}>
+                                                                            {gem.rateNotSet ? (
+                                                                                <span style={{ color: '#d72c0d' }}>₹0.00</span>
+                                                                            ) : (
+                                                                                <>
+                                                                                    {gem.hasDiscount && (
+                                                                                        <div style={{ textDecoration: 'line-through', color: '#8c9196', fontSize: '12px' }}>
+                                                                                            ₹{(gem.cost / 100).toFixed(2)}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    ₹{(gem.finalCost / 100).toFixed(2)}
+                                                                                </>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                )
+                                                            })
                                                         ) : (priceBreakdown.gemstone_price !== undefined || priceBreakdown.gemstone_price_original !== undefined) ? (
                                                             <tr style={{ borderBottom: '1px solid #f1f2f3' }}>
                                                                 <td style={{ padding: '8px 16px' }}>
                                                                     {priceBreakdown.gemstone_name || 'Gemstone'}
                                                                     {priceBreakdown.has_gemstone_discount && <Badge tone="critical">Sale</Badge>}
-                                                                    {priceBreakdown.gemstone_details?.type === 'per_carat' && (
-                                                                        <div style={{ color: '#6d7175', fontSize: '12px' }}>
-                                                                            {priceBreakdown.gemstone_details.weight}ct × ₹{(priceBreakdown.gemstone_details.rate || 0).toLocaleString()}/ct
-                                                                        </div>
-                                                                    )}
-                                                                    {priceBreakdown.gemstone_details?.type === 'per_piece' && (
-                                                                        <div style={{ color: '#6d7175', fontSize: '12px' }}>
-                                                                            {priceBreakdown.gemstone_details.pieces} pcs × ₹{(priceBreakdown.gemstone_details.rate || 0).toLocaleString()}/pc
-                                                                        </div>
-                                                                    )}
-                                                                    {priceBreakdown.gemstone_details?.type === 'manual' && (
-                                                                        <div style={{ color: '#6d7175', fontSize: '12px' }}>
-                                                                            Manual Price
-                                                                        </div>
-                                                                    )}
+                                                                    {(() => {
+                                                                        const isCZ = (priceBreakdown.gemstone_name?.toLowerCase().includes('cubic zirconia') || priceBreakdown.gemstone_name?.toLowerCase().includes('cz'));
+                                                                        const weightUnit = isCZ ? 'gm' : 'ct';
+                                                                        const rateUnit = isCZ ? 'gm' : 'ct';
+
+                                                                        return (
+                                                                            <>
+                                                                                {priceBreakdown.gemstone_details?.type === 'per_carat' && (
+                                                                                    <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                        {priceBreakdown.gemstone_details.weight}{weightUnit} × ₹{(priceBreakdown.gemstone_details.rate || 0).toLocaleString()}/{rateUnit}
+                                                                                    </div>
+                                                                                )}
+                                                                                {priceBreakdown.gemstone_details?.type === 'per_piece' && (
+                                                                                    <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                        {priceBreakdown.gemstone_details.pieces} pcs × ₹{(priceBreakdown.gemstone_details.rate || 0).toLocaleString()}/pc
+                                                                                    </div>
+                                                                                )}
+                                                                                {priceBreakdown.gemstone_details?.type === 'manual' && (
+                                                                                    <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                        Manual Price
+                                                                                    </div>
+                                                                                )}
+                                                                            </>
+                                                                        );
+                                                                    })()}
                                                                 </td>
                                                                 <td style={{ padding: '8px 16px', textAlign: 'right' }}>
                                                                     {priceBreakdown.has_gemstone_discount && (

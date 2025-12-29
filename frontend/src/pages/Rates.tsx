@@ -69,9 +69,10 @@ export default function Rates() {
         color: '',
         clarity: '',
         caratRange: '',
-        pricingType: 'perCarat', // 'perCarat' or 'perPiece'
+        pricingType: 'perCarat', // 'perCarat', 'perPiece', or 'perGram'
         ratePerCarat: 0,
         ratePerPiece: 0,
+        ratePerGram: 0, // Virtual field for frontend-only
         reason: '',
     });
 
@@ -123,9 +124,16 @@ export default function Rates() {
     const handleUpdateStoneRate = async () => {
         setLoading(true);
         try {
+            // Conversion Logic:
+            // Input: ratePerGram (e.g. 500/g)
+            // Storage: ratePerCarat (1g = 5ct). So Price/ct = Price/g / 5.
+            const finalRatePerCarat = stoneEditData.pricingType === 'perGram'
+                ? (stoneEditData.ratePerGram || 0) / 5
+                : stoneEditData.ratePerCarat;
+
             const payload = {
                 ...stoneEditData,
-                ratePerCarat: stoneEditData.pricingType === 'perCarat' ? stoneEditData.ratePerCarat : null,
+                ratePerCarat: (stoneEditData.pricingType === 'perCarat' || stoneEditData.pricingType === 'perGram') ? finalRatePerCarat : null,
                 ratePerPiece: stoneEditData.pricingType === 'perPiece' ? stoneEditData.ratePerPiece : null,
             };
             await api.post('/stone-rates/update', payload);
@@ -155,6 +163,11 @@ export default function Rates() {
 
     const openStoneModal = (rate?: StoneRate) => {
         if (rate) {
+            // Check if CZ to set virtual 'perGram' mode
+            const isCZ = rate.stoneType.toLowerCase().includes('cz') || rate.stoneType.toLowerCase().includes('cubic zirconia');
+            // ratePerCarat to ratePerGram: 100/ct * 5 = 500/g
+            const virtualRatePerGram = (rate.ratePerCarat || 0) * 5;
+
             setStoneEditData({
                 id: rate.id,
                 stoneType: rate.stoneType,
@@ -165,9 +178,10 @@ export default function Rates() {
                 color: rate.color || '',
                 clarity: rate.clarity || '',
                 caratRange: rate.caratRange || '',
-                pricingType: rate.ratePerCarat ? 'perCarat' : 'perPiece',
+                pricingType: isCZ ? 'perGram' : (rate.ratePerCarat ? 'perCarat' : 'perPiece'),
                 ratePerCarat: rate.ratePerCarat || 0,
                 ratePerPiece: rate.ratePerPiece || 0,
+                ratePerGram: isCZ ? virtualRatePerGram : 0,
                 reason: '',
             });
         } else {
@@ -184,6 +198,7 @@ export default function Rates() {
                 pricingType: 'perCarat',
                 ratePerCarat: 0,
                 ratePerPiece: 0,
+                ratePerGram: 0,
                 reason: '',
             });
         }
@@ -396,10 +411,16 @@ export default function Rates() {
                                                     </td>
                                                     <td style={{ padding: '12px' }}>
                                                         <Text variant="bodyMd" as="span">
-                                                            {rate.ratePerCarat
-                                                                ? `${formatCurrency(rate.ratePerCarat)} / carat`
-                                                                : `${formatCurrency(rate.ratePerPiece || 0)} / piece`
-                                                            }
+                                                            {(() => {
+                                                                if (rate.ratePerCarat) {
+                                                                    const isCZ = rate.stoneType.toLowerCase().includes('cz') || rate.stoneType.toLowerCase().includes('cubic zirconia');
+                                                                    if (isCZ) {
+                                                                        return `${formatCurrency(rate.ratePerCarat * 5)} / gram`;
+                                                                    }
+                                                                    return `${formatCurrency(rate.ratePerCarat)} / carat`;
+                                                                }
+                                                                return `${formatCurrency(rate.ratePerPiece || 0)} / piece`;
+                                                            })()}
                                                         </Text>
                                                     </td>
                                                     <td style={{ padding: '12px', textAlign: 'right' }}>
@@ -619,7 +640,14 @@ export default function Rates() {
                                 { label: 'CZ Cubic Zirconia', value: 'cz' },
                             ]}
                             value={stoneEditData.stoneType}
-                            onChange={(value) => setStoneEditData({ ...stoneEditData, stoneType: value })}
+                            onChange={(value) => {
+                                const isCZ = value.toLowerCase().includes('cz') || value.toLowerCase().includes('cubic zirconia');
+                                setStoneEditData({
+                                    ...stoneEditData,
+                                    stoneType: value,
+                                    pricingType: isCZ ? 'perGram' : 'perCarat'
+                                });
+                            }}
                         />
 
                         <Select
@@ -739,12 +767,21 @@ export default function Rates() {
 
                         <Text as="h3" variant="headingMd">Pricing Method</Text>
 
-                        <RadioButton
-                            label="Per Carat (Weight-based)"
-                            checked={stoneEditData.pricingType === 'perCarat'}
-                            id="perCarat"
-                            onChange={() => setStoneEditData({ ...stoneEditData, pricingType: 'perCarat' })}
-                        />
+                        {((stoneEditData.stoneType || '').toLowerCase().includes('cz') || (stoneEditData.stoneType || '').toLowerCase().includes('cubic zirconia')) ? (
+                            <RadioButton
+                                label="Per Gram (Weight-based)"
+                                checked={stoneEditData.pricingType === 'perGram'}
+                                id="perGram"
+                                onChange={() => setStoneEditData({ ...stoneEditData, pricingType: 'perGram' })}
+                            />
+                        ) : (
+                            <RadioButton
+                                label="Per Carat (Weight-based)"
+                                checked={stoneEditData.pricingType === 'perCarat'}
+                                id="perCarat"
+                                onChange={() => setStoneEditData({ ...stoneEditData, pricingType: 'perCarat' })}
+                            />
+                        )}
 
                         {stoneEditData.pricingType === 'perCarat' && (
                             <TextField
@@ -754,6 +791,17 @@ export default function Rates() {
                                 onChange={(value) => setStoneEditData({ ...stoneEditData, ratePerCarat: parseFloat(value) })}
                                 autoComplete="off"
                                 helpText="Price will be calculated as: Rate × Weight in carats"
+                            />
+                        )}
+
+                        {stoneEditData.pricingType === 'perGram' && (
+                            <TextField
+                                label="Rate per Gram (₹)"
+                                type="number"
+                                value={String(stoneEditData.ratePerGram)}
+                                onChange={(value) => setStoneEditData({ ...stoneEditData, ratePerGram: parseFloat(value) })}
+                                autoComplete="off"
+                                helpText="Price will be calculated as: Rate × Weight in grams (Storage: Converted to Carats)"
                             />
                         )}
 

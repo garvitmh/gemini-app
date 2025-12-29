@@ -57,6 +57,8 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
     // 1. Metal Discount
     const metalDiscType = product.metalDiscountType || settings.defaultMetalDiscountType;
     const metalDiscValue = product.metalDiscountValue ?? settings.defaultMetalDiscountValue;
+
+    forensicLog(`[CALC] Metal Discount: Type=${metalDiscType}, Value=${metalDiscValue}`);
     const finalMetalValue = applyDiscount(metalValue, metalDiscType, metalDiscValue);
 
     // Calculate Making Charge based on Type
@@ -75,7 +77,12 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
     // 2. Making Charge Discount
     const makingDiscType = product.makingDiscountType || settings.defaultMakingDiscountType;
     const makingDiscValue = product.makingDiscountValue ?? settings.defaultMakingDiscountValue;
+
+    forensicLog(`[CALC] Making Charge: Base=${makingCharge}, Type=${makingChargeType}, Rate=${makingChargeValue}`);
+    forensicLog(`[CALC] Making Discount: Type=${makingDiscType}, Value=${makingDiscValue}`);
+
     const finalMakingCharge = applyDiscount(makingCharge, makingDiscType, makingDiscValue);
+    forensicLog(`[CALC] Final Making: ${finalMakingCharge} (Original: ${makingCharge})`);
 
     let gemstoneCost = 0;
     let stoneDetails: any = null;
@@ -133,6 +140,7 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
                 hasDiscount: gemCost !== finalGemCost,
                 rateNotSet: rateNotSet,
             });
+            forensicLog(`[CALC] Gem ${gemstone.gemstoneType}: Original=${gemCost}, Final=${finalGemCost}, DiscType=${gemDiscType}`);
         }
         stoneDetails = { type: 'multiple', gemstones: gemstonesArray, totalCost: gemstoneCost };
     }
@@ -1927,6 +1935,10 @@ app.post('/api/products/calculate-price', async (req, res) => {
             stonePieces, stoneWeightCarat,
             isManualGemstonePrice, manualGemstoneWeight, manualGemstonePrice,
             makingChargeType, makingChargeValue,
+            metalDiscountType, metalDiscountValue,
+            makingDiscountType, makingDiscountValue,
+            gemstoneDiscountType, gemstoneDiscountValue,
+            enamelColor, enamelWeightGrams, enamelDiscountType, enamelDiscountValue,
             gemstones
         } = req.body;
         console.log('🔍 req.body.gemstones:', req.body.gemstones);
@@ -1954,6 +1966,16 @@ app.post('/api/products/calculate-price', async (req, res) => {
             makingChargeValue: (makingChargeValue !== undefined && makingChargeValue !== null && makingChargeValue !== '')
                 ? parseFloat(makingChargeValue)
                 : null,
+            metalDiscountType: metalDiscountType || null,
+            metalDiscountValue: metalDiscountValue ? parseFloat(metalDiscountValue) : null,
+            makingDiscountType: makingDiscountType || null,
+            makingDiscountValue: makingDiscountValue ? parseFloat(makingDiscountValue) : null,
+            gemstoneDiscountType: gemstoneDiscountType || null,
+            gemstoneDiscountValue: gemstoneDiscountValue ? parseFloat(gemstoneDiscountValue) : null,
+            enamelColor: enamelColor || null,
+            enamelWeightGrams: enamelWeightGrams ? parseFloat(enamelWeightGrams) : null,
+            enamelDiscountType: enamelDiscountType || null,
+            enamelDiscountValue: enamelDiscountValue ? parseFloat(enamelDiscountValue) : null,
             gemstones: gemstones || [],
         };
 
