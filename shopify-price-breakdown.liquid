@@ -1,0 +1,245 @@
+{% comment %}
+  Gemini App - Price Breakdown Display for Shopify
+  
+  This snippet displays a detailed price breakdown for jewelry products.
+  The breakdown data is stored in the product variant metafield: gemini.price_breakdown
+  
+  Installation:
+  1. Add this code to your product template (e.g., product-template.liquid or main-product.liquid)
+  2. Place it where you want the price breakdown to appear (typically after the product price)
+  3. Make sure your products have the gemini.price_breakdown metafield populated
+{% endcomment %}
+
+{% assign breakdown = product.selected_or_first_available_variant.metafields.gemini.price_breakdown %}
+
+{% if breakdown %}
+  <div class="gemini-price-breakdown" style="margin-top: 20px; border: 1px solid #e1e3e5; border-radius: 8px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    
+    <h3 style="background-color: #f9fafb; margin: 0; padding: 12px 16px; font-size: 16px; border-bottom: 1px solid #e1e3e5; font-weight: 600;">
+      Price Breakdown
+    </h3>
+    
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <tbody>
+        
+        {% comment %} Metal Price Row {% endcomment %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            {{ breakdown.metal_name | default: 'Metal' }} Price
+            {% if breakdown.has_metal_discount %}
+              <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+            {% endif %}
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {% if breakdown.has_metal_discount %}
+              <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                {{ breakdown.metal_value_original | times: 0.01 | money }}
+              </div>
+            {% endif %}
+            {{ breakdown.metal_value | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+        {% comment %} Wastage Row {% endcomment %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Wastage ({{ breakdown.wastage_pct }}%)
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {{ breakdown.wastage_amount | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+        {% comment %} Making Charges Row {% endcomment %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Making Charges
+            {% if breakdown.has_making_discount %}
+              <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+            {% endif %}
+            <div style="font-size: 12px; color: #6b7280;">
+              {% if breakdown.making_charge_type == 'percent' %}
+                {{ breakdown.making_charge_rate }}% of value
+              {% elsif breakdown.making_charge_type == 'flat' %}
+                Flat Rate
+              {% else %}
+                ₹{{ breakdown.making_charge_rate }}/g
+              {% endif %}
+            </div>
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {% if breakdown.has_making_discount %}
+              <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                {{ breakdown.making_charges_original | times: 0.01 | money }}
+              </div>
+            {% endif %}
+            {{ breakdown.making_charges | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+        {% comment %} Multiple Gemstones Support {% endcomment %}
+        {% if breakdown.gemstone_details.type == 'multiple' and breakdown.gemstone_details.gemstones %}
+          {% for gem in breakdown.gemstone_details.gemstones %}
+            <tr style="border-bottom: 1px solid #f1f2f3;">
+              <td style="padding: 10px 16px; color: #374151;">
+                {{ gem.type }}
+                {% if gem.clarity %}({{ gem.clarity }}){% endif %}
+                {% if gem.color %}{{ gem.color }}{% endif %}
+                {% if gem.cut %}{{ gem.cut }}{% endif %}
+                {% if gem.hasDiscount %}
+                  <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+                {% endif %}
+                {% if gem.rateNotSet %}
+                  <div style="font-size: 12px; color: #d93025; font-weight: 600;">⚠️ Rate not set</div>
+                {% elsif gem.weight %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem.cost | divided_by: gem.weight | divided_by: 100 | round }}/ct</div>
+                {% elsif gem.pieces %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem.cost | divided_by: gem.pieces | divided_by: 100 | round }}/pc</div>
+                {% endif %}
+              </td>
+              <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+                {% if gem.rateNotSet %}
+                  <span style="color: #d93025;">₹0.00</span>
+                {% else %}
+                  {% if gem.hasDiscount %}
+                    <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                      {{ gem.cost | times: 0.01 | money }}
+                    </div>
+                  {% endif %}
+                  {{ gem.finalCost | times: 0.01 | money }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          
+          {% comment %} Total Gemstones Row (if multiple) {% endcomment %}
+          {% if breakdown.gemstone_details.gemstones.size > 1 %}
+            <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
+              <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
+              <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
+                {{ breakdown.gemstone_price | times: 0.01 | money }}
+              </td>
+            </tr>
+          {% endif %}
+        
+        {% comment %} Single Gemstone (Fallback) {% endcomment %}
+        {% elsif breakdown.gemstone_price > 0 or breakdown.gemstone_price_original > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #374151;">
+              {{ breakdown.gemstone_name | default: 'Gemstone' }}
+              {% if breakdown.has_gemstone_discount %}
+                <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+              {% endif %}
+              {% if breakdown.gemstone_details.type == 'per_carat' %}
+                <div style="font-size: 12px; color: #6b7280;">
+                  {{ breakdown.gemstone_details.weight }}ct × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 }}/ct
+                </div>
+              {% elsif breakdown.gemstone_details.type == 'per_piece' %}
+                <div style="font-size: 12px; color: #6b7280;">
+                  {{ breakdown.gemstone_details.pieces }} pcs × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 }}/pc
+                </div>
+              {% elsif breakdown.gemstone_details.type == 'manual' %}
+                <div style="font-size: 12px; color: #6b7280;">Manual Price</div>
+              {% endif %}
+            </td>
+            <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+              {% if breakdown.has_gemstone_discount %}
+                <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                  {{ breakdown.gemstone_price_original | times: 0.01 | money }}
+                </div>
+              {% endif %}
+              {{ breakdown.gemstone_price | times: 0.01 | money }}
+            </td>
+          </tr>
+        {% endif %}
+        
+        {% comment %} Enamel Row {% endcomment %}
+        {% if breakdown.enamel_price > 0 or breakdown.enamel_price_original > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #374151;">
+              {{ breakdown.enamel_name | default: 'Enamel' }}
+              {% if breakdown.has_enamel_discount %}
+                <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+              {% endif %}
+              {% if breakdown.enamel_details.type == 'per_gram' %}
+                <div style="font-size: 12px; color: #6b7280;">
+                  {{ breakdown.enamel_details.weight }}g × ₹{{ breakdown.enamel_details.rate | divided_by: 1 }}/g
+                </div>
+              {% endif %}
+            </td>
+            <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+              {% if breakdown.has_enamel_discount %}
+                <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                  {{ breakdown.enamel_price_original | times: 0.01 | money }}
+                </div>
+              {% endif %}
+              {{ breakdown.enamel_price | times: 0.01 | money }}
+            </td>
+          </tr>
+        {% endif %}
+        
+        {% comment %} Subtotal Row {% endcomment %}
+        <tr style="background-color: #fafbfb; border-top: 1px solid #e1e3e5;">
+          <td style="padding: 8px 16px; font-weight: 600; color: #374151;">Subtotal</td>
+          <td style="padding: 8px 16px; text-align: right; font-weight: 600; color: #374151;">
+            {{ breakdown.subtotal | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+        {% comment %} GST Row {% endcomment %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">GST ({{ breakdown.gst_pct }}%)</td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {% assign gst_value = breakdown.gst_amount | default: breakdown.gst | default: 0 %}
+            {{ gst_value | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+        {% comment %} Discount Row (if applicable) {% endcomment %}
+        {% if breakdown.discount > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #d93025;">Discount</td>
+            <td style="padding: 10px 16px; text-align: right; color: #d93025;">
+              -{{ breakdown.discount | times: 0.01 | money }}
+            </td>
+          </tr>
+        {% endif %}
+        
+        {% comment %} Final Price Row {% endcomment %}
+        <tr style="background-color: #f0fdf4;">
+          <td style="padding: 12px 16px; font-weight: 700; color: #166534;">Final Price</td>
+          <td style="padding: 12px 16px; text-align: right; font-weight: 700; color: #166534;">
+            {% if breakdown.has_any_discount %}
+              <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px; font-weight: 400;">
+                {{ breakdown.total_original | times: 0.01 | money }}
+              </div>
+            {% endif %}
+            {{ breakdown.total | times: 0.01 | money }}
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+    
+    <div style="margin-top: 8px; padding: 8px 16px; font-size: 12px; color: #6b7280; text-align: center;">
+      Prices are subject to change based on market rates.
+    </div>
+    
+  </div>
+{% endif %}
+
+<style>
+  /* Responsive styling for mobile devices */
+  @media (max-width: 768px) {
+    .gemini-price-breakdown table {
+      font-size: 13px !important;
+    }
+    .gemini-price-breakdown td {
+      padding: 8px 12px !important;
+    }
+    .gemini-price-breakdown h3 {
+      font-size: 15px !important;
+      padding: 10px 12px !important;
+    }
+  }
+</style>

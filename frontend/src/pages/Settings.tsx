@@ -13,8 +13,19 @@ import {
 import api from '../utils/api';
 
 interface Settings {
-    defaultMakingFlat: number;
-    defaultMakingPct: number;
+    defaultMakingChargeType: string;
+    defaultMakingChargeValue: number;
+
+    // Discounts
+    defaultMetalDiscountType: string;
+    defaultMetalDiscountValue: number;
+    defaultMakingDiscountType: string;
+    defaultMakingDiscountValue: number;
+    defaultGemstoneDiscountType: string;
+    defaultGemstoneDiscountValue: number;
+    defaultEnamelDiscountType: string;
+    defaultEnamelDiscountValue: number;
+
     defaultWastagePct: number;
     defaultGstPct: number;
     defaultDiscount: number;
@@ -24,8 +35,16 @@ interface Settings {
 
 export default function Settings() {
     const [settings, setSettings] = useState<Settings>({
-        defaultMakingFlat: 0,
-        defaultMakingPct: 0,
+        defaultMakingChargeType: 'per_gram',
+        defaultMakingChargeValue: 1500,
+        defaultMetalDiscountType: 'none',
+        defaultMetalDiscountValue: 0,
+        defaultMakingDiscountType: 'none',
+        defaultMakingDiscountValue: 0,
+        defaultGemstoneDiscountType: 'none',
+        defaultGemstoneDiscountValue: 0,
+        defaultEnamelDiscountType: 'none',
+        defaultEnamelDiscountValue: 0,
         defaultWastagePct: 0,
         defaultGstPct: 3,
         defaultDiscount: 0,
@@ -33,6 +52,8 @@ export default function Settings() {
     });
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+    const [applyingToAll, setApplyingToAll] = useState(false);
+    const [applyResult, setApplyResult] = useState<any>(null);
 
     useEffect(() => {
         fetchSettings();
@@ -62,6 +83,27 @@ export default function Settings() {
         }
     };
 
+    const handleApplyToAll = async () => {
+        if (!confirm('This will apply current settings to ALL products and recalculate prices. This may take several minutes. Continue?')) {
+            return;
+        }
+
+        setApplyingToAll(true);
+        setApplyResult(null);
+        try {
+            const response = await api.post('/settings/apply-to-all');
+            setApplyResult(response.data);
+            setSuccessMessage(`Successfully applied settings to ${response.data.successCount} products!`);
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } catch (error) {
+            console.error('Error applying settings:', error);
+            setSuccessMessage('Failed to apply settings to products');
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } finally {
+            setApplyingToAll(false);
+        }
+    };
+
     return (
         <Page
             title="Settings"
@@ -71,6 +113,14 @@ export default function Settings() {
                 onAction: handleSave,
                 loading,
             }}
+            secondaryActions={[
+                {
+                    content: 'Apply to All Products',
+                    onAction: handleApplyToAll,
+                    loading: applyingToAll,
+                    destructive: true,
+                }
+            ]}
         >
             <Layout>
                 {successMessage && (
@@ -91,25 +141,34 @@ export default function Settings() {
                                 These values will be used as defaults for all products unless overridden.
                             </Text>
 
-                            <TextField
-                                label="Making Charge (Flat) ₹"
-                                type="number"
-                                value={String(settings.defaultMakingFlat)}
-                                onChange={(value) =>
-                                    setSettings({ ...settings, defaultMakingFlat: parseFloat(value) || 0 })
-                                }
-                                autoComplete="off"
-                            />
-
-                            <TextField
-                                label="Making Charge (%)"
-                                type="number"
-                                value={String(settings.defaultMakingPct)}
-                                onChange={(value) =>
-                                    setSettings({ ...settings, defaultMakingPct: parseFloat(value) || 0 })
-                                }
-                                autoComplete="off"
-                            />
+                            <BlockStack gap="200">
+                                <Select
+                                    label="Making Charge Type"
+                                    options={[
+                                        { label: 'Per Gram (e.g. ₹1500/g)', value: 'per_gram' },
+                                        { label: 'Percentage (e.g. 10% of metal)', value: 'percent' },
+                                        { label: 'Flat Rate (e.g. ₹500 fixed)', value: 'flat' },
+                                    ]}
+                                    value={settings.defaultMakingChargeType}
+                                    onChange={(value) => setSettings({ ...settings, defaultMakingChargeType: value })}
+                                />
+                                <TextField
+                                    label="Making Charge Value"
+                                    type="number"
+                                    value={String(settings.defaultMakingChargeValue)}
+                                    onChange={(value) =>
+                                        setSettings({ ...settings, defaultMakingChargeValue: parseFloat(value) || 0 })
+                                    }
+                                    autoComplete="off"
+                                    prefix={settings.defaultMakingChargeType === 'percent' ? '' : '₹'}
+                                    suffix={settings.defaultMakingChargeType === 'percent' ? '%' : ''}
+                                    helpText={
+                                        settings.defaultMakingChargeType === 'per_gram' ? 'Using ₹ X per gram of metal weight' :
+                                            settings.defaultMakingChargeType === 'percent' ? 'Using X% of metal value + wastage' :
+                                                'Using flat ₹ X per item'
+                                    }
+                                />
+                            </BlockStack>
 
                             <TextField
                                 label="Wastage (%)"
@@ -130,6 +189,121 @@ export default function Settings() {
                                 }
                                 autoComplete="off"
                             />
+
+                            <Text variant="headingMd" as="h3">Global Discounts</Text>
+                            <Text as="p" tone="subdued">Set default discounts for all products.</Text>
+
+                            {/* Metal Discount */}
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Metal Discount</Text>
+                                <BlockStack inlineAlign="start">
+                                    <Select
+                                        label="Type"
+                                        options={[
+                                            { label: 'None', value: 'none' },
+                                            { label: 'Percentage (%)', value: 'percent' },
+                                            { label: 'Flat Amount (₹)', value: 'flat' },
+                                        ]}
+                                        value={settings.defaultMetalDiscountType}
+                                        onChange={(value) => setSettings({ ...settings, defaultMetalDiscountType: value })}
+                                    />
+                                    {settings.defaultMetalDiscountType !== 'none' && (
+                                        <TextField
+                                            label="Value"
+                                            type="number"
+                                            value={String(settings.defaultMetalDiscountValue)}
+                                            onChange={(value) => setSettings({ ...settings, defaultMetalDiscountValue: parseFloat(value) || 0 })}
+                                            prefix={settings.defaultMetalDiscountType === 'flat' ? '₹' : ''}
+                                            suffix={settings.defaultMetalDiscountType === 'percent' ? '%' : ''}
+                                            autoComplete="off"
+                                        />
+                                    )}
+                                </BlockStack>
+                            </BlockStack>
+
+                            {/* Making Charge Discount */}
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Making Charge Discount</Text>
+                                <BlockStack inlineAlign="start">
+                                    <Select
+                                        label="Type"
+                                        options={[
+                                            { label: 'None', value: 'none' },
+                                            { label: 'Percentage (%)', value: 'percent' },
+                                            { label: 'Flat Amount (₹)', value: 'flat' },
+                                        ]}
+                                        value={settings.defaultMakingDiscountType}
+                                        onChange={(value) => setSettings({ ...settings, defaultMakingDiscountType: value })}
+                                    />
+                                    {settings.defaultMakingDiscountType !== 'none' && (
+                                        <TextField
+                                            label="Value"
+                                            type="number"
+                                            value={String(settings.defaultMakingDiscountValue)}
+                                            onChange={(value) => setSettings({ ...settings, defaultMakingDiscountValue: parseFloat(value) || 0 })}
+                                            prefix={settings.defaultMakingDiscountType === 'flat' ? '₹' : ''}
+                                            suffix={settings.defaultMakingDiscountType === 'percent' ? '%' : ''}
+                                            autoComplete="off"
+                                        />
+                                    )}
+                                </BlockStack>
+                            </BlockStack>
+
+                            {/* Gemstone Discount */}
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Gemstone/Diamond Discount</Text>
+                                <BlockStack inlineAlign="start">
+                                    <Select
+                                        label="Type"
+                                        options={[
+                                            { label: 'None', value: 'none' },
+                                            { label: 'Percentage (%)', value: 'percent' },
+                                            { label: 'Flat Amount (₹)', value: 'flat' },
+                                        ]}
+                                        value={settings.defaultGemstoneDiscountType}
+                                        onChange={(value) => setSettings({ ...settings, defaultGemstoneDiscountType: value })}
+                                    />
+                                    {settings.defaultGemstoneDiscountType !== 'none' && (
+                                        <TextField
+                                            label="Value"
+                                            type="number"
+                                            value={String(settings.defaultGemstoneDiscountValue)}
+                                            onChange={(value) => setSettings({ ...settings, defaultGemstoneDiscountValue: parseFloat(value) || 0 })}
+                                            prefix={settings.defaultGemstoneDiscountType === 'flat' ? '₹' : ''}
+                                            suffix={settings.defaultGemstoneDiscountType === 'percent' ? '%' : ''}
+                                            autoComplete="off"
+                                        />
+                                    )}
+                                </BlockStack>
+                            </BlockStack>
+
+                            {/* Enamel Discount */}
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Enamel Discount</Text>
+                                <BlockStack inlineAlign="start">
+                                    <Select
+                                        label="Type"
+                                        options={[
+                                            { label: 'None', value: 'none' },
+                                            { label: 'Percentage (%)', value: 'percent' },
+                                            { label: 'Flat Amount (₹)', value: 'flat' },
+                                        ]}
+                                        value={settings.defaultEnamelDiscountType}
+                                        onChange={(value) => setSettings({ ...settings, defaultEnamelDiscountType: value })}
+                                    />
+                                    {settings.defaultEnamelDiscountType !== 'none' && (
+                                        <TextField
+                                            label="Value"
+                                            type="number"
+                                            value={String(settings.defaultEnamelDiscountValue)}
+                                            onChange={(value) => setSettings({ ...settings, defaultEnamelDiscountValue: parseFloat(value) || 0 })}
+                                            prefix={settings.defaultEnamelDiscountType === 'flat' ? '₹' : ''}
+                                            suffix={settings.defaultEnamelDiscountType === 'percent' ? '%' : ''}
+                                            autoComplete="off"
+                                        />
+                                    )}
+                                </BlockStack>
+                            </BlockStack>
 
                             <TextField
                                 label="Default Discount ₹"

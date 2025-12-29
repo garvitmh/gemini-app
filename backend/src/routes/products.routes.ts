@@ -42,6 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
                 skip: (parseInt(page as string) - 1) * parseInt(limit as string),
                 take: parseInt(limit as string),
                 orderBy: { updatedAt: 'desc' },
+                include: { gemstones: true },
             }),
             prisma.product.count({ where }),
         ]);
@@ -281,17 +282,147 @@ router.put('/:id', async (req: Request, res: Response) => {
         }
 
         const { id } = req.params;
-        const updates = req.body;
+        const { gemstones, ...updates } = req.body;
 
+        // Update product with basic fields
         const product = await prisma.product.update({
             where: { id, shopId: shop.id },
             data: updates,
         });
 
-        res.json({ success: true, product });
+        // Handle gemstones separately if provided
+        if (gemstones !== undefined) {
+            // Delete all existing gemstones for this product
+            await prisma.productGemstone.deleteMany({
+                where: { productId: id },
+            });
+
+            // Create new gemstones if any
+            if (Array.isArray(gemstones) && gemstones.length > 0) {
+                await prisma.productGemstone.createMany({
+                    data: gemstones.map((gem: any) => ({
+                        productId: id,
+                        gemstoneType: gem.gemstoneType,
+                        gemstoneCut: gem.gemstoneCut || null,
+                        gemstoneColor: gem.gemstoneColor || null,
+                        gemstoneClarity: gem.gemstoneClarity || null,
+                        gemstoneCaratRange: gem.gemstoneCaratRange || null,
+                        gemstoneWeight: gem.gemstoneWeight || null,
+                        discountType: gem.discountType || null,
+                        discountValue: gem.discountValue || null,
+                    })),
+                });
+            }
+        }
+
+        // Fetch the updated product with gemstones
+        const updatedProduct = await prisma.product.findUnique({
+            where: { id },
+            include: { gemstones: true },
+        });
+
+        res.json({ success: true, product: updatedProduct });
     } catch (error) {
         console.error('Error updating product:', error);
         res.status(500).json({ error: 'Failed to update product' });
+    }
+});
+
+// Generate Template
+router.get('/template', async (req: Request, res: Response) => {
+    try {
+        const format = req.query.format as string || 'xlsx';
+
+        // Accurate columns based on import logic
+        const headers = [
+            {
+                SKU: 'Example-SKU-123',
+                Name: 'Gold Ring with Diamond (Reference Only)',
+                'Weight(g)': 5.5,
+                Karat: 22,
+                Metal: 'gold',
+                'StoneWeight(ct)': 0.5,
+                StoneType: 'diamond'
+            }
+        ];
+
+        if (format === 'csv') {
+            const csvContent = 'SKU,Name,Weight(g),Karat,Metal,StoneWeight(ct),StoneType\nExample-SKU-123,Gold Ring (Ref),5.5,22,gold,0.5,diamond';
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=products_template.csv');
+            res.send(csvContent);
+        } else {
+            const worksheet = XLSX.utils.json_to_sheet(headers);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+
+            const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=products_template.xlsx');
+            res.send(buffer);
+        }
+    } catch (error) {
+        console.error('Error generating template:', error);
+        res.status(500).json({ error: 'Failed to generate template' });
+    }
+});
+
+// Export Products
+router.get('/export', async (req: Request, res: Response) => {
+    try {
+        const shopDomain = res.locals.shopify.session.shop;
+        const shop = await prisma.shop.findUnique({ where: { domain: shopDomain } });
+
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        const format = req.query.format as string || 'xlsx';
+        const products = await prisma.product.findMany({
+            where: { shopId: shop.id },
+            orderBy: { updatedAt: 'desc' },
+            include: { gemstones: true }
+        });
+
+        // Flatten data for export
+        const rows = products.map(p => {
+            const gemInfo = p.gemstones.map(g => `${g.gemstoneType} (${g.gemstoneWeight}ct)`).join(', ');
+            return {
+                SKU: p.sku,
+                Title: p.title,
+                Variant: p.variantTitle,
+                Status: p.status,
+                'Weight(g)': p.weightGrams,
+                Karat: p.karat,
+                Metal: p.metal,
+                Price: p.currentPrice,
+                'Stone Info': gemInfo,
+                'Last Updated': p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : ''
+            };
+        });
+
+        if (format === 'csv') {
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename=products_export_${Date.now()}.csv`);
+            res.send(csvOutput);
+        } else {
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Products');
+
+            const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename=products_export_${Date.now()}.xlsx`);
+            res.send(buffer);
+        }
+    } catch (error) {
+        console.error('Error exporting products:', error);
+        res.status(500).json({ error: 'Failed to export products' });
     }
 });
 

@@ -24,8 +24,9 @@ async function main() {
         where: { shopId: shop.id },
         create: {
             shopId: shop.id,
-            defaultMakingFlat: 500,
-            defaultMakingPct: 10,
+            defaultMakingPerGram: 1500,
+            defaultMakingChargeType: 'per_gram',
+            defaultMakingChargeValue: 1500,
             defaultWastagePct: 2,
             defaultGstPct: 3,
             defaultDiscount: 0,
@@ -58,11 +59,11 @@ async function main() {
 
     // Create stone rates
     const stoneRates = [
-        { stoneType: 'diamond', ratePerCarat: 250000, ratePerPiece: null },
-        { stoneType: 'ruby', ratePerCarat: 150000, ratePerPiece: null },
-        { stoneType: 'sapphire', ratePerCarat: 120000, ratePerPiece: null },
-        { stoneType: 'emerald', ratePerCarat: 180000, ratePerPiece: null },
-        { stoneType: 'gemstone', ratePerCarat: 50000, ratePerPiece: 5000 },
+        { stoneType: 'diamond', ratePerCarat: 250000, ratePerPiece: null, unitType: 'carat' },
+        { stoneType: 'ruby', ratePerCarat: 150000, ratePerPiece: null, unitType: 'carat' },
+        { stoneType: 'sapphire', ratePerCarat: 120000, ratePerPiece: null, unitType: 'carat' },
+        { stoneType: 'emerald', ratePerCarat: 180000, ratePerPiece: null, unitType: 'carat' },
+        { stoneType: 'gemstone', ratePerCarat: 50000, ratePerPiece: 5000, unitType: 'carat' },
     ];
 
     for (const rate of stoneRates) {

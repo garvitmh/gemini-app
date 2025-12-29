@@ -7,6 +7,7 @@ import {
     BlockStack,
     InlineStack,
     Badge,
+    Banner,
 } from '@shopify/polaris';
 import { format } from 'date-fns';
 import api from '../utils/api';
@@ -22,20 +23,32 @@ interface MetalRate {
     updatedAt: string;
 }
 
+interface EnamelRate {
+    id: string;
+    enamelColor: string;
+    ratePerGram: number;
+    updatedAt: string;
+}
+
 export default function Dashboard() {
     const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
+    const [enamelRates, setEnamelRates] = useState<EnamelRate[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchRates();
     }, []);
 
     const fetchRates = async () => {
+        setError(null);
         try {
             const response = await api.get('/rates');
-            setMetalRates(response.data.metalRates);
+            setMetalRates(response.data.metalRates || []);
+            setEnamelRates(response.data.enamelRates || []);
         } catch (error) {
             console.error('Error fetching rates:', error);
+            setError('Failed to load active rates. Please verify backend connection.');
         } finally {
             setLoading(false);
         }
@@ -68,6 +81,13 @@ export default function Dashboard() {
         <Page title="Dashboard" subtitle="Live metal and gemstone rates">
             <Layout>
                 <Layout.Section>
+                    {error && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <Banner tone="critical" onDismiss={() => setError(null)}>
+                                <p>{error}</p>
+                            </Banner>
+                        </div>
+                    )}
                     <BlockStack gap="400">
                         <Text variant="headingLg" as="h2">
                             Live Rates
@@ -100,6 +120,25 @@ export default function Dashboard() {
                                     </BlockStack>
                                 </Card>
                             ))}
+                            {enamelRates.map((rate) => (
+                                <Card key={rate.id}>
+                                    <BlockStack gap="300">
+                                        <Text variant="headingMd" as="h3">
+                                            {rate.enamelColor} Enamel
+                                        </Text>
+                                        <BlockStack gap="200">
+                                            <div>
+                                                <Text variant="bodyLg" as="p" fontWeight="bold">
+                                                    {formatCurrency(rate.ratePerGram)} / g
+                                                </Text>
+                                            </div>
+                                            <Text variant="bodySm" as="p" tone="subdued">
+                                                Updated: {format(new Date(rate.updatedAt), 'MMM dd, HH:mm')}
+                                            </Text>
+                                        </BlockStack>
+                                    </BlockStack>
+                                </Card>
+                            ))}
                         </InlineStack>
                     </BlockStack>
                 </Layout.Section>
@@ -113,7 +152,7 @@ export default function Dashboard() {
                             <BlockStack gap="200">
                                 <div>
                                     <Text variant="bodyLg" as="p" fontWeight="bold">
-                                        {metalRates.length}
+                                        {metalRates.length + enamelRates.length}
                                     </Text>
                                     <Text variant="bodySm" as="p" tone="subdued">
                                         Active Rates

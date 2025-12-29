@@ -123,23 +123,27 @@ export class BulkPriceUpdateService {
                         const priceData = prices.find((p) => p.productId === product.id);
                         if (priceData) {
                             try {
-                                await prisma.product.update({
-                                    where: { id: product.id },
-                                    data: {
-                                        lastCalculatedPrice: priceData.newPrice,
-                                        lastPushedPrice: priceData.newPrice,
-                                        lastPushedAt: new Date(),
-                                    },
-                                });
+                                // Update local database and create history in a transaction
+                                await prisma.$transaction(async (tx) => {
+                                    await tx.product.update({
+                                        where: { id: product.id },
+                                        data: {
+                                            lastCalculatedPrice: priceData.newPrice,
+                                            lastPushedPrice: priceData.newPrice,
+                                            lastPushedAt: new Date(),
+                                            currentPrice: priceData.newPrice,
+                                        },
+                                    });
 
-                                await prisma.priceHistory.create({
-                                    data: {
-                                        productId: product.id,
-                                        oldPrice: priceData.oldPrice,
-                                        newPrice: priceData.newPrice,
-                                        status: 'success',
-                                        triggeredBy: 'bulk_update',
-                                    },
+                                    await tx.priceHistory.create({
+                                        data: {
+                                            productId: product.id,
+                                            oldPrice: priceData.oldPrice,
+                                            newPrice: priceData.newPrice,
+                                            status: 'success',
+                                            triggeredBy: 'bulk_update',
+                                        },
+                                    });
                                 });
 
                                 processedCount++;
@@ -151,7 +155,7 @@ export class BulkPriceUpdateService {
                         }
                     }
                 } catch (error) {
-                    console.error(`Batch ${i} failed:`, error);
+                    console.error(`Batch starting at ${i} failed:`, error);
                     failedCount += batch.length;
                     failedProducts.push(...batch.map((p) => p.id));
                 }
@@ -165,7 +169,7 @@ export class BulkPriceUpdateService {
                     },
                 });
 
-                // Rate limiting: Wait 500ms between batches (2 requests per second)
+                // Rate limiting: Wait between batches
                 await new Promise((resolve) => setTimeout(resolve, this.RATE_LIMIT_DELAY_MS));
             }
 

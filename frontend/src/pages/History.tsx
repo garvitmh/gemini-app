@@ -71,8 +71,8 @@ export default function History() {
         }
     };
 
-    const formatCurrency = (amount?: number) => {
-        if (!amount) return '-';
+    const formatCurrency = (amount?: number | null) => {
+        if (amount === null || amount === undefined) return '-';
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
             currency: 'INR',

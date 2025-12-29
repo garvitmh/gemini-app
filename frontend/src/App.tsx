@@ -9,12 +9,14 @@ import History from './pages/History';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+// @ts-ignore - JSON import
+import en from '@shopify/polaris/locales/en.json';
 
 function App() {
     return (
-        <ErrorBoundary>
-            <AppProvider i18n={{}}>
-                <BrowserRouter>
+        <AppProvider i18n={en}>
+            <ErrorBoundary>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                     <Layout>
                         <Routes>
                             <Route path="/" element={<Dashboard />} />
@@ -39,8 +41,8 @@ function App() {
                     theme="light"
                     style={{ zIndex: 10000 }}
                 />
-            </AppProvider>
-        </ErrorBoundary>
+            </ErrorBoundary>
+        </AppProvider>
     );
 }
 

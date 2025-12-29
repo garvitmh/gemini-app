@@ -1,0 +1,200 @@
+{% comment %}
+  Price Breakdown - Matches Admin Portal Styling
+  Uses the same format as the admin panel for consistency
+{% endcomment %}
+
+{% assign breakdown_json = product.selected_or_first_available_variant.metafields.gemini.price_breakdown.value %}
+
+{% if breakdown_json %}
+  <div style="margin-top: 20px;">
+    <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Price Breakdown</h3>
+    
+    <div style="border: 1px solid #e1e3e5; border-radius: 8px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background-color: #f9fafb; border-bottom: 1px solid #e1e3e5;">
+            <th style="padding: 10px 16px; text-align: left; font-weight: 600;">Component</th>
+            <th style="padding: 10px 16px; text-align: right; font-weight: 600;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          {% comment %} Metal Price {% endcomment %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 8px 16px;">
+              {{ breakdown_json.metal_name | default: 'Metal' }} Price
+              {% if breakdown_json.has_metal_discount %}
+                <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #fee2e2; color: #d93025; font-size: 11px; border-radius: 4px; font-weight: 600;">Sale</span>
+              {% endif %}
+              <div style="color: #6d7175; font-size: 12px;">(₹{{ breakdown_json.metal_rate | times: 0.01 | round: 2 }}/g)</div>
+            </td>
+            <td style="padding: 8px 16px; text-align: right;">
+              {% if breakdown_json.has_metal_discount %}
+                <div style="text-decoration: line-through; color: #8c9196; font-size: 12px;">
+                  ₹{{ breakdown_json.metal_value_original | times: 0.01 | round: 2 }}
+                </div>
+              {% endif %}
+              ₹{{ breakdown_json.metal_value | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+          {% comment %} Wastage {% endcomment %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 8px 16px;">
+              Wastage <span style="color: #6d7175; font-size: 12px;">({{ breakdown_json.wastage_pct }}%)</span>
+            </td>
+            <td style="padding: 8px 16px; text-align: right;">
+              ₹{{ breakdown_json.wastage_amount | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+          {% comment %} Making Charges {% endcomment %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 8px 16px;">
+              Making Charges
+              {% if breakdown_json.has_making_discount %}
+                <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #fee2e2; color: #d93025; font-size: 11px; border-radius: 4px; font-weight: 600;">Sale</span>
+              {% endif %}
+              <div style="color: #6d7175; font-size: 12px;">
+                {% if breakdown_json.making_charge_type == 'percent' %}
+                  {{ breakdown_json.making_charge_rate }}% of value
+                {% elsif breakdown_json.making_charge_type == 'flat' %}
+                  Flat Rate
+                {% else %}
+                  ₹{{ breakdown_json.making_charge_rate }}/g
+                {% endif %}
+              </div>
+            </td>
+            <td style="padding: 8px 16px; text-align: right;">
+              {% if breakdown_json.has_making_discount %}
+                <div style="text-decoration: line-through; color: #8c9196; font-size: 12px;">
+                  ₹{{ breakdown_json.making_charges_original | times: 0.01 | round: 2 }}
+                </div>
+              {% endif %}
+              ₹{{ breakdown_json.making_charges | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+          {% comment %} Gemstones - Multiple {% endcomment %}
+          {% if breakdown_json.gemstone_details.type == 'multiple' and breakdown_json.gemstone_details.gemstones %}
+            {% for gem in breakdown_json.gemstone_details.gemstones %}
+              <tr style="border-bottom: 1px solid #f1f2f3;">
+                <td style="padding: 8px 16px;">
+                  {{ gem.type | capitalize }}
+                  {% if gem.clarity %} ({{ gem.clarity }}){% endif %}
+                  {% if gem.color %} {{ gem.color }}{% endif %}
+                  {% if gem.cut %} {{ gem.cut }}{% endif %}
+                  {% if gem.hasDiscount %}
+                    <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #fee2e2; color: #d93025; font-size: 11px; border-radius: 4px; font-weight: 600;">Sale</span>
+                  {% endif %}
+                  {% if gem.weight %}
+                    <div style="color: #6d7175; font-size: 12px;">
+                      {{ gem.weight }}ct × ₹{{ gem.cost | divided_by: gem.weight | divided_by: 100 | round: 0 }}/ct
+                    </div>
+                  {% endif %}
+                </td>
+                <td style="padding: 8px 16px; text-align: right;">
+                  {% if gem.hasDiscount %}
+                    <div style="text-decoration: line-through; color: #8c9196; font-size: 12px;">
+                      ₹{{ gem.cost | times: 0.01 | round: 2 }}
+                    </div>
+                  {% endif %}
+                  ₹{{ gem.finalCost | times: 0.01 | round: 2 }}
+                </td>
+              </tr>
+            {% endfor %}
+          {% elsif breakdown_json.gemstone_price and breakdown_json.gemstone_price > 0 %}
+            {% comment %} Single Gemstone {% endcomment %}
+            <tr style="border-bottom: 1px solid #f1f2f3;">
+              <td style="padding: 8px 16px;">
+                {{ breakdown_json.gemstone_name | default: 'Gemstone' }}
+                {% if breakdown_json.has_gemstone_discount %}
+                  <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #fee2e2; color: #d93025; font-size: 11px; border-radius: 4px; font-weight: 600;">Sale</span>
+                {% endif %}
+                {% if breakdown_json.gemstone_details.type == 'per_carat' %}
+                  <div style="color: #6d7175; font-size: 12px;">
+                    {{ breakdown_json.gemstone_details.weight }}ct × ₹{{ breakdown_json.gemstone_details.rate }}/ct
+                  </div>
+                {% elsif breakdown_json.gemstone_details.type == 'per_piece' %}
+                  <div style="color: #6d7175; font-size: 12px;">
+                    {{ breakdown_json.gemstone_details.pieces }} pcs × ₹{{ breakdown_json.gemstone_details.rate }}/pc
+                  </div>
+                {% endif %}
+              </td>
+              <td style="padding: 8px 16px; text-align: right;">
+                {% if breakdown_json.has_gemstone_discount %}
+                  <div style="text-decoration: line-through; color: #8c9196; font-size: 12px;">
+                    ₹{{ breakdown_json.gemstone_price_original | times: 0.01 | round: 2 }}
+                  </div>
+                {% endif %}
+                ₹{{ breakdown_json.gemstone_price | times: 0.01 | round: 2 }}
+              </td>
+            </tr>
+          {% endif %}
+          
+          {% comment %} Enamel {% endcomment %}
+          {% if breakdown_json.enamel_price and breakdown_json.enamel_price > 0 %}
+            <tr style="border-bottom: 1px solid #f1f2f3;">
+              <td style="padding: 8px 16px;">
+                {{ breakdown_json.enamel_name | default: 'Enamel' }}
+                {% if breakdown_json.has_enamel_discount %}
+                  <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #fee2e2; color: #d93025; font-size: 11px; border-radius: 4px; font-weight: 600;">Sale</span>
+                {% endif %}
+              </td>
+              <td style="padding: 8px 16px; text-align: right;">
+                {% if breakdown_json.has_enamel_discount %}
+                  <div style="text-decoration: line-through; color: #8c9196; font-size: 12px;">
+                    ₹{{ breakdown_json.enamel_price_original | times: 0.01 | round: 2 }}
+                  </div>
+                {% endif %}
+                ₹{{ breakdown_json.enamel_price | times: 0.01 | round: 2 }}
+              </td>
+            </tr>
+          {% endif %}
+          
+          {% comment %} Subtotal {% endcomment %}
+          <tr style="background-color: #fafbfb; border-top: 1px solid #e1e3e5;">
+            <td style="padding: 8px 16px; font-weight: 600;">Subtotal</td>
+            <td style="padding: 8px 16px; text-align: right; font-weight: 600;">
+              ₹{{ breakdown_json.subtotal | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+          {% comment %} GST {% endcomment %}
+          <tr>
+            <td style="padding: 8px 16px;">
+              GST <span style="color: #6d7175; font-size: 12px;">({{ breakdown_json.gst_pct }}%)</span>
+            </td>
+            <td style="padding: 8px 16px; text-align: right;">
+              ₹{{ breakdown_json.gst_amount | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+          {% comment %} Discount {% endcomment %}
+          {% if breakdown_json.discount and breakdown_json.discount > 0 %}
+            <tr>
+              <td style="padding: 8px 16px; color: #d82c0d;">Discount</td>
+              <td style="padding: 8px 16px; text-align: right; color: #d82c0d;">
+                -₹{{ breakdown_json.discount | times: 0.01 | round: 2 }}
+              </td>
+            </tr>
+          {% endif %}
+          
+          {% comment %} Final Price {% endcomment %}
+          <tr style="background-color: #f0fdf4; border-top: 1px solid #ced4da;">
+            <td style="padding: 12px 16px; font-weight: 700; font-size: 15px; color: #008060;">Final Price</td>
+            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: #008060;">
+              {% if breakdown_json.has_any_discount %}
+                <div style="text-decoration: line-through; color: #8c9196; font-size: 12px; font-weight: 400;">
+                  ₹{{ breakdown_json.total_original | times: 0.01 | round: 2 }}
+                </div>
+              {% endif %}
+              ₹{{ breakdown_json.total | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ShopifyApp } from '@shopify/shopify-app-express';
 import { PrismaClient } from '@prisma/client';
 

@@ -1,0 +1,51 @@
+{% comment %}
+  DEBUG VERSION - This will show you what's happening
+  Replace your current code with this temporarily to see what data is available
+{% endcomment %}
+
+<div style="border: 2px solid red; padding: 20px; margin: 20px 0;">
+  <h3>DEBUG: Metafield Check</h3>
+  
+  {% assign breakdown_gemini = product.selected_or_first_available_variant.metafields.gemini.price_breakdown %}
+  {% assign breakdown_custom = product.selected_or_first_available_variant.metafields.custom.code_form %}
+  
+  <p><strong>Checking gemini.price_breakdown:</strong></p>
+  {% if breakdown_gemini %}
+    <p style="color: green;">✅ gemini.price_breakdown EXISTS</p>
+    <p>Type: {{ breakdown_gemini.type }}</p>
+    <p>Value: {{ breakdown_gemini.value }}</p>
+    <p>Metal Value: {{ breakdown_gemini.metal_value }}</p>
+    <p>Total: {{ breakdown_gemini.total }}</p>
+  {% else %}
+    <p style="color: red;">❌ gemini.price_breakdown is NULL or doesn't exist</p>
+  {% endif %}
+  
+  <hr>
+  
+  <p><strong>Checking custom.code_form:</strong></p>
+  {% if breakdown_custom %}
+    <p style="color: green;">✅ custom.code_form EXISTS</p>
+    <p>Type: {{ breakdown_custom.type }}</p>
+    <p>Value: {{ breakdown_custom.value }}</p>
+    <p>Metal Value: {{ breakdown_custom.metal_value }}</p>
+    <p>Total: {{ breakdown_custom.total }}</p>
+  {% else %}
+    <p style="color: red;">❌ custom.code_form is NULL or doesn't exist</p>
+  {% endif %}
+  
+  <hr>
+  
+  <p><strong>All variant metafields:</strong></p>
+  {% for metafield in product.selected_or_first_available_variant.metafields %}
+    <p>{{ metafield.namespace }}.{{ metafield.key }} = {{ metafield.value | truncate: 100 }}</p>
+  {% endfor %}
+</div>
+
+{% comment %}
+  After you see the debug output, you'll know:
+  1. If the metafield exists
+  2. What type it is
+  3. If the data is accessible
+  
+  Then we can fix the actual template accordingly.
+{% endcomment %}

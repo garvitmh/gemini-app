@@ -178,8 +178,8 @@ export class PricingService {
             metal_rate: metalRate,
             karat: product.karat,
             wt_g: product.weightGrams || 0,
-            making_flat: product.makingChargeFlat ?? settings?.defaultMakingFlat ?? 0,
-            making_pct: product.makingChargePct ?? settings?.defaultMakingPct ?? 0,
+            making_flat: product.makingChargeFlat ?? 0,
+            making_pct: product.makingChargePct ?? 0,
             wastage_pct: product.wastagePct ?? settings?.defaultWastagePct ?? 0,
             gst_pct: product.gstPct ?? settings?.defaultGstPct ?? 3,
             stone_rate: stoneRate,
@@ -223,7 +223,23 @@ export class PricingService {
         const results = await Promise.all(
             products.map(async (product) => {
                 try {
-                    const newPrice = await this.calculateProductPrice(shopId, product);
+                    // Map Prisma product to Pricing interface (handling nulls)
+                    const pricingProduct = {
+                        weightGrams: product.weightGrams || undefined,
+                        metal: product.metal || undefined,
+                        karat: product.karat || undefined,
+                        stoneWeightCarat: product.stoneWeightCarat || undefined,
+                        stoneType: product.stoneType || undefined,
+                        stonePieces: product.stonePieces || undefined,
+                        useCustomFormula: product.useCustomFormula || false,
+                        customFormula: product.customFormula || undefined,
+                        makingChargeFlat: product.makingChargeFlat || undefined,
+                        makingChargePct: product.makingChargePct || undefined,
+                        wastagePct: product.wastagePct || undefined,
+                        gstPct: product.gstPct || undefined,
+                        discount: product.discount || undefined,
+                    };
+                    const newPrice = await this.calculateProductPrice(shopId, pricingProduct);
                     const oldPrice = product.currentPrice;
                     const delta = oldPrice ? newPrice - oldPrice : 0;
                     const deltaPct = oldPrice ? (delta / oldPrice) * 100 : 0;

@@ -1,261 +1,277 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:./dev.db"
 }
 
-// Shopify shop/merchant
 model Shop {
-  id              String   @id @default(cuid())
-  domain          String   @unique // mystore.myshopify.com
-  accessToken     String   // Encrypted
+  id              String           @id @default(cuid())
+  domain          String           @unique
+  accessToken     String
   scope           String
-  isActive        Boolean  @default(true)
-  installedAt     DateTime @default(now())
+  isActive        Boolean          @default(true)
+  installedAt     DateTime         @default(now())
   uninstalledAt   DateTime?
-  
-  // Settings
-  timezone        String   @default("UTC")
-  currency        String   @default("INR")
-  
-  // Relations
-  metalRates      MetalRate[]
-  stoneRates      StoneRate[]
-  products        Product[]
+  timezone        String           @default("UTC")
+  currency        String           @default("INR")
   auditLogs       AuditLog[]
   automationRules AutomationRule[]
+  enamelColors    EnamelColor[]
+  enamelRates     EnamelRate[]
+  metalRates      MetalRate[]
+  products        Product[]
   settings        ShopSettings?
-  
+  stoneRates      StoneRate[]
+
   @@index([domain])
 }
 
-// Shop-specific settings
 model ShopSettings {
-  id                String  @id @default(cuid())
-  shopId            String  @unique
-  shop              Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  // Default pricing rules
-  defaultMakingPerGram Float   @default(1500) // Making charge per gram (e.g., ₹1500/g)
-  defaultWastagePct Float   @default(0)
-  defaultGstPct     Float   @default(3)
-  defaultDiscount   Float   @default(0)
-  
-  // Rate update settings
-  rateUpdateMode    String  @default("manual") // manual, auto
-  rateSource        String  @default("manual") // manual, csv, api
-  rateSourceUrl     String?
-  
-  // Notification settings
-  emailNotifications Boolean @default(true)
-  notificationEmail  String?
-  webhookUrl         String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                           String   @id @default(cuid())
+  shopId                       String   @unique
+  defaultMakingPerGram         Float    @default(1500)
+  defaultWastagePct            Float    @default(0)
+  defaultGstPct                Float    @default(3)
+  defaultDiscount              Float    @default(0)
+  defaultMakingChargeType      String   @default("per_gram")
+  defaultMakingChargeValue     Float    @default(1500)
+  defaultMetalDiscountType     String   @default("none")
+  defaultMetalDiscountValue    Float    @default(0)
+  defaultMakingDiscountType    String   @default("none")
+  defaultMakingDiscountValue   Float    @default(0)
+  defaultGemstoneDiscountType  String   @default("none")
+  defaultGemstoneDiscountValue Float    @default(0)
+  defaultEnamelDiscountType    String   @default("none")
+  defaultEnamelDiscountValue   Float    @default(0)
+  rateUpdateMode               String   @default("manual")
+  rateSource                   String   @default("manual")
+  rateSourceUrl                String?
+  emailNotifications           Boolean  @default(true)
+  notificationEmail            String?
+  webhookUrl                   String?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  shop                         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
-// Metal rates (Gold, Silver, Platinum)
 model MetalRate {
-  id            String   @id @default(cuid())
-  shopId        String
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  metal         String   // "gold", "silver", "platinum"
-  karat         Int?     // For gold: 24, 22, 18, 14, etc. Null for silver/platinum
-  purity        Float?   // For silver/platinum: 0.925, 0.999, etc.
-  
-  ratePerGram   Float    // Base rate per gram
-  rateSource    String   @default("manual") // manual, csv, api
-  
-  updatedBy     String?  // User who updated (for manual updates)
-  reason        String?  // Reason for update
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id          String   @id @default(cuid())
+  shopId      String
+  metal       String
+  karat       Int?
+  purity      Float?
+  ratePerGram Float
+  rateSource  String   @default("manual")
+  updatedBy   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   @@index([shopId, metal, karat])
   @@index([shopId, updatedAt])
 }
 
-// Stone rates (Diamonds, Gemstones)
 model StoneRate {
-  id            String   @id @default(cuid())
-  shopId        String
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  stoneType     String   // "diamond", "ruby", "sapphire", "emerald", "gemstone"
-  
-  // Diamond grading (optional)
-  cut           String?  // "Excellent", "Very Good", "Good", etc.
-  color         String?  // "D", "E", "F", etc.
-  clarity       String?  // "IF", "VVS1", "VVS2", etc.
-  caratRange    String?  // "0.5-1.0", "1.0-2.0", etc.
-  
-  ratePerCarat  Float?   // For per-carat pricing
-  ratePerPiece  Float?   // For per-piece pricing
-  
-  updatedBy     String?
-  reason        String?
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id                String   @id @default(cuid())
+  shopId            String
+  stoneType         String
+  naturalOrLabgrown String?
+  quality           String?
+  shape             String?
+  cut               String?
+  color             String?
+  clarity           String?
+  caratRange        String?
+  unitType          String   @default("carat")
+  ratePerCarat      Float?
+  ratePerPiece      Float?
+  ratePerGram       Float?
+  updatedBy         String?
+  reason            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   @@index([shopId, stoneType])
 }
 
-// Product mapping
-model Product {
-  id                String   @id @default(cuid())
-  shopId            String
-  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  // Shopify product data
-  shopifyProductId  String
-  shopifyVariantId  String   @unique
-  sku               String?
-  title             String
-  variantTitle      String?
-  imageUrl          String?  // Product image from Shopify
-  status            String?  // "active", "draft", "archived"
-  
-  // Physical properties
-  weightGrams       Float?
-  metal             String?  // "gold", "silver", "platinum"
-  karat             Int?
-  
-  stoneWeightCarat  Float?
-  stoneType         String?
-  stonePieces       Int?
-  
-  // Enhanced gemstone/diamond fields
-  gemstoneType      String?  // "diamond", "ruby", "sapphire", "emerald"
-  gemstoneCut       String?  // "Excellent", "Very Good", "Good"
-  gemstoneColor     String?  // For diamonds: "D", "E", "F", etc.
-  gemstoneClarity   String?  // "IF", "VVS1", "VVS2", "VS1", etc.
-  gemstoneCaratRange String?
+model EnamelRate {
+  id          String   @id @default(cuid())
+  shopId      String
+  enamelColor String
+  ratePerGram Float
+  updatedBy   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  // Manual Gemstone Pricing
-  isManualGemstonePrice Boolean @default(false)
+  @@index([shopId, enamelColor])
+}
+
+model EnamelColor {
+  id        String   @id @default(cuid())
+  shopId    String
+  colorName String
+  hexCode   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+model ProductGemstone {
+  id                 String   @id @default(cuid())
+  productId          String
+  gemstoneType       String
+  naturalOrLabgrown  String?
+  quality            String?
+  shape              String?
+  gemstoneCut        String?
+  gemstoneColor      String?
+  gemstoneClarity    String?
+  gemstoneCaratRange String?
+  gemstoneWeight     Float?
+  gemstonePieces     Int?
+  unitType           String   @default("carat")
+  discountType       String?
+  discountValue      Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Product {
+  id                    String            @id @default(cuid())
+  shopId                String
+  shopifyProductId      String
+  shopifyVariantId      String            @unique
+  sku                   String?
+  title                 String
+  variantTitle          String?
+  imageUrl              String?
+  status                String?
+  weightGrams           Float?
+  metal                 String?
+  karat                 Int?
+  stoneWeightCarat      Float?
+  stoneType             String?
+  stonePieces           Int?
+  gemstoneType          String?
+  gemstoneCut           String?
+  gemstoneColor         String?
+  gemstoneClarity       String?
+  gemstoneCaratRange    String?
+  isManualGemstonePrice Boolean           @default(false)
   manualGemstoneWeight  Float?
-  manualGemstonePrice   Float? // "0.5-1.0", "1.0-2.0"
-  
-  // Pricing formula and overrides
-  useCustomFormula  Boolean  @default(false)
-  customFormula     String?  // e.g., "{metal_rate} * {wt_g} * (1 + {making_pct}/100) + {stone_rate} * {stone_wt}"
-  
-  makingChargeFlat  Float?
-  makingChargePct   Float?
-  wastagePct        Float?
-  gstPct            Float?
-  discount          Float?
-  
-  // Current price
-  currentPrice      Float?
-  lastCalculatedPrice Float?
-  lastPushedPrice   Float?
-  lastPushedAt      DateTime?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  priceHistory      PriceHistory[]
-  
+  manualGemstonePrice   Float?
+  useCustomFormula      Boolean           @default(false)
+  customFormula         String?
+  makingChargeFlat      Float?
+  makingChargePct       Float?
+  wastagePct            Float?
+  gstPct                Float?
+  discount              Float?
+  currentPrice          Float?
+  lastCalculatedPrice   Float?
+  lastPushedPrice       Float?
+  lastPushedAt          DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  enamelColor           String?
+  enamelDiscountType    String?
+  enamelDiscountValue   Float?
+  enamelWeightGrams     Float?
+  gemstoneDiscountType  String?
+  gemstoneDiscountValue Float?
+  makingChargeType      String?
+  makingChargeValue     Float?
+  makingDiscountType    String?
+  makingDiscountValue   Float?
+  metalDiscountType     String?
+  metalDiscountValue    Float?
+  gemstoneQuality       String?
+  gemstoneShape         String?
+  naturalOrLabgrown     String?
+  priceBreakdownHtml    String?
+  priceHistory          PriceHistory[]
+  shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  gemstones             ProductGemstone[]
+
   @@index([shopId, shopifyProductId])
   @@index([shopId, sku])
 }
 
-// Price push history
 model PriceHistory {
-  id            String   @id @default(cuid())
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  oldPrice      Float?
-  newPrice      Float
-  
-  pushedAt      DateTime @default(now())
-  status        String   // "success", "failed", "pending"
-  errorMessage  String?
-  
-  triggeredBy   String?  // "manual", "auto", "scheduled"
-  
+  id           String   @id @default(cuid())
+  productId    String
+  oldPrice     Float?
+  newPrice     Float
+  pushedAt     DateTime @default(now())
+  status       String
+  errorMessage String?
+  triggeredBy  String?
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@index([productId, pushedAt])
 }
 
-// Audit logs
 model AuditLog {
   id        String   @id @default(cuid())
   shopId    String
-  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  userId    String?  // User identifier (if applicable)
-  action    String   // "rate_update", "price_push", "settings_change", etc.
-  entity    String   // "metal_rate", "product", "settings", etc.
+  userId    String?
+  action    String
+  entity    String
   entityId  String?
-  
-  oldValue  String?  // JSON string
-  newValue  String?  // JSON string
+  oldValue  String?
+  newValue  String?
   reason    String?
-  
   createdAt DateTime @default(now())
-  
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   @@index([shopId, createdAt])
   @@index([shopId, action])
 }
 
-// Automation rules
 model AutomationRule {
-  id                String   @id @default(cuid())
-  shopId            String
-  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  enabled           Boolean  @default(false)
-  
-  // Trigger conditions
-  triggerType       String   // "rate_change", "schedule"
-  thresholdPercent  Float?   // Trigger if rate changes by X%
-  schedule          String?  // Cron expression for scheduled updates
-  
-  // Actions
-  autoRecalculate   Boolean  @default(true)
-  autoPush          Boolean  @default(false)
-  
-  lastRun           DateTime?
-  lastRunStatus     String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  id               String    @id @default(cuid())
+  shopId           String
+  enabled          Boolean   @default(false)
+  triggerType      String
+  thresholdPercent Float?
+  schedule         String?
+  autoRecalculate  Boolean   @default(true)
+  autoPush         Boolean   @default(false)
+  lastRun          DateTime?
+  lastRunStatus    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   @@index([shopId, enabled])
 }
 
-// Background jobs tracking
 model Job {
-  id            String   @id @default(cuid())
-  shopId        String
-  
-  jobType       String   // "bulk_price_update", "rate_sync", etc.
-  status        String   // "pending", "processing", "completed", "failed"
-  
-  totalItems    Int?
+  id             String    @id @default(cuid())
+  shopId         String
+  jobType        String
+  status         String
+  totalItems     Int?
   processedItems Int?
-  failedItems   Int?
-  
-  result        String?  // JSON string with results
-  error         String?
-  
-  createdAt     DateTime @default(now())
-  startedAt     DateTime?
-  completedAt   DateTime?
-  
+  failedItems    Int?
+  result         String?
+  error          String?
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
   @@index([shopId, status])
   @@index([createdAt])
 }
