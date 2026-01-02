@@ -1181,6 +1181,259 @@ app.delete('/api/making-groups/:id', async (req, res) => {
     }
 });
 
+// Get products for assignment modal (with group status)
+app.get('/api/products/for-assignment', async (req, res) => {
+    try {
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        const { page = 1, limit = 20, search, excludeGroupId } = req.query;
+        const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+        const where: any = { shopId: shop.id };
+        if (search) {
+            where.OR = [
+                { sku: { contains: search as string } },
+                { title: { contains: search as string } },
+            ];
+        }
+
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                skip,
+                take: parseInt(limit as string),
+                orderBy: { title: 'asc' },
+                select: {
+                    id: true,
+                    sku: true,
+                    title: true,
+                    imageUrl: true,
+                    makingGroupId: true,
+                    makingGroup: {
+                        select: {
+                            id: true,
+                            name: true,
+                        }
+                    }
+                },
+            }),
+            prisma.product.count({ where }),
+        ]);
+
+        // Transform products to include assignment status
+        const productsWithStatus = products.map(product => ({
+            ...product,
+            isAssigned: !!product.makingGroupId,
+            assignedToCurrentGroup: excludeGroupId ? product.makingGroupId === excludeGroupId : false,
+            assignedToOtherGroup: product.makingGroupId && product.makingGroupId !== excludeGroupId,
+            assignedGroupName: product.makingGroup?.name || null,
+        }));
+
+        res.json({
+            products: productsWithStatus,
+            pagination: {
+                page: parseInt(page as string),
+                limit: parseInt(limit as string),
+                total,
+                pages: Math.ceil(total / parseInt(limit as string)),
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching products for assignment:', error);
+        res.status(500).json({ error: 'Failed to fetch products' });
+    }
+});
+
+// Get products assigned to a specific making group
+app.get('/api/making-groups/:id/products', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        // Verify making group belongs to shop
+        const makingGroup = await prisma.makingGroup.findFirst({
+            where: { id, shopId: shop.id }
+        });
+
+        if (!makingGroup) {
+            return res.status(404).json({ error: 'Making group not found' });
+        }
+
+        const { page = 1, limit = 20 } = req.query;
+        const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where: { makingGroupId: id },
+                skip,
+                take: parseInt(limit as string),
+                orderBy: { title: 'asc' },
+                select: {
+                    id: true,
+                    sku: true,
+                    title: true,
+                    imageUrl: true,
+                },
+            }),
+            prisma.product.count({ where: { makingGroupId: id } }),
+        ]);
+
+        res.json({
+            products,
+            pagination: {
+                page: parseInt(page as string),
+                limit: parseInt(limit as string),
+                total,
+                pages: Math.ceil(total / parseInt(limit as string)),
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching group products:', error);
+        res.status(500).json({ error: 'Failed to fetch group products' });
+    }
+});
+
+// Assign products to a making group (with exclusive membership validation)
+app.post('/api/making-groups/:id/assign-products', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { productIds } = req.body;
+
+        if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+            return res.status(400).json({ error: 'Product IDs array is required' });
+        }
+
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        // Verify making group belongs to shop
+        const makingGroup = await prisma.makingGroup.findFirst({
+            where: { id, shopId: shop.id }
+        });
+
+        if (!makingGroup) {
+            return res.status(404).json({ error: 'Making group not found' });
+        }
+
+        // CRITICAL: Server-side validation for exclusive membership
+        // Check if any products are already assigned to a DIFFERENT group
+        const products = await prisma.product.findMany({
+            where: {
+                id: { in: productIds },
+                shopId: shop.id,
+            },
+            include: {
+                makingGroup: {
+                    select: { id: true, name: true }
+                }
+            }
+        });
+
+        // Find conflicting products (assigned to different group)
+        const conflictingProducts = products.filter(
+            p => p.makingGroupId && p.makingGroupId !== id
+        );
+
+        if (conflictingProducts.length > 0) {
+            // REJECT ENTIRE REQUEST - do not silently reassign
+            return res.status(400).json({
+                error: 'Some products are already assigned to another Making Group',
+                conflictingProducts: conflictingProducts.map(p => ({
+                    id: p.id,
+                    title: p.title,
+                    sku: p.sku,
+                    currentGroupName: p.makingGroup?.name,
+                })),
+            });
+        }
+
+        // All products are safe to assign (either NULL or already in this group)
+        // Only update products that are not already in this group
+        const productsToUpdate = products.filter(p => p.makingGroupId !== id);
+
+        if (productsToUpdate.length > 0) {
+            await prisma.product.updateMany({
+                where: {
+                    id: { in: productsToUpdate.map(p => p.id) },
+                },
+                data: {
+                    makingGroupId: id,
+                    // DO NOT update any other fields - only makingGroupId
+                },
+            });
+        }
+
+        console.log(`✅ Assigned ${productsToUpdate.length} products to making group: ${makingGroup.name}`);
+
+        res.json({
+            success: true,
+            assignedCount: productsToUpdate.length,
+            alreadyAssignedCount: products.length - productsToUpdate.length,
+            message: `Successfully assigned ${productsToUpdate.length} product(s) to "${makingGroup.name}"`,
+        });
+    } catch (error) {
+        console.error('Error assigning products to making group:', error);
+        res.status(500).json({ error: 'Failed to assign products' });
+    }
+});
+
+// Remove products from a making group
+app.post('/api/making-groups/:id/remove-products', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { productIds } = req.body;
+
+        if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+            return res.status(400).json({ error: 'Product IDs array is required' });
+        }
+
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        // Verify making group belongs to shop
+        const makingGroup = await prisma.makingGroup.findFirst({
+            where: { id, shopId: shop.id }
+        });
+
+        if (!makingGroup) {
+            return res.status(404).json({ error: 'Making group not found' });
+        }
+
+        // Only remove products that actually belong to this group
+        const result = await prisma.product.updateMany({
+            where: {
+                id: { in: productIds },
+                makingGroupId: id, // Only update if currently assigned to this group
+            },
+            data: {
+                makingGroupId: null,
+                // DO NOT update any other fields
+            },
+        });
+
+        console.log(`✅ Removed ${result.count} products from making group: ${makingGroup.name}`);
+
+        res.json({
+            success: true,
+            removedCount: result.count,
+            message: `Successfully removed ${result.count} product(s) from "${makingGroup.name}"`,
+        });
+    } catch (error) {
+        console.error('Error removing products from making group:', error);
+        res.status(500).json({ error: 'Failed to remove products' });
+    }
+});
+
 // ==================== END MAKING GROUPS API ====================
 
 

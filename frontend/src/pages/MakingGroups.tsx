@@ -13,8 +13,15 @@ import {
     ButtonGroup,
     InlineStack,
     BlockStack,
+    Thumbnail,
+    Checkbox,
+    Spinner,
+    Badge,
+    Pagination,
+    Tooltip,
+    Icon,
 } from '@shopify/polaris';
-import { PlusIcon } from '@shopify/polaris-icons';
+import { PlusIcon, SearchIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
 
 interface MakingGroup {
@@ -28,13 +35,25 @@ interface MakingGroup {
     };
 }
 
+interface ProductForAssignment {
+    id: string;
+    sku: string | null;
+    title: string;
+    imageUrl: string | null;
+    makingGroupId: string | null;
+    isAssigned: boolean;
+    assignedToCurrentGroup: boolean;
+    assignedToOtherGroup: boolean;
+    assignedGroupName: string | null;
+}
+
 export default function MakingGroups() {
     const [makingGroups, setMakingGroups] = useState<MakingGroup[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
-    // Modal state
+    // Create/Edit Modal state
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<MakingGroup | null>(null);
     const [formName, setFormName] = useState('');
@@ -44,6 +63,18 @@ export default function MakingGroups() {
     // Delete confirmation
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletingGroup, setDeletingGroup] = useState<MakingGroup | null>(null);
+
+    // Product Assignment Modal state
+    const [showAssignModal, setShowAssignModal] = useState(false);
+    const [assigningGroup, setAssigningGroup] = useState<MakingGroup | null>(null);
+    const [assignProducts, setAssignProducts] = useState<ProductForAssignment[]>([]);
+    const [assignLoading, setAssignLoading] = useState(false);
+    const [assignSearch, setAssignSearch] = useState('');
+    const [assignPage, setAssignPage] = useState(1);
+    const [assignTotalPages, setAssignTotalPages] = useState(1);
+    const [assignTotal, setAssignTotal] = useState(0);
+    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+    const [originalAssignedIds, setOriginalAssignedIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchMakingGroups();
@@ -90,11 +121,9 @@ export default function MakingGroups() {
             };
 
             if (editingGroup) {
-                // Update
                 await api.put(`/making-groups/${editingGroup.id}`, data);
                 setSuccessMessage('Making group updated successfully');
             } else {
-                // Create
                 await api.post('/making-groups', data);
                 setSuccessMessage('Making group created successfully');
             }
@@ -135,6 +164,145 @@ export default function MakingGroups() {
         }
     };
 
+    // ==================== PRODUCT ASSIGNMENT HANDLERS ====================
+
+    const handleManageProducts = async (group: MakingGroup) => {
+        setAssigningGroup(group);
+        setAssignSearch('');
+        setAssignPage(1);
+        setSelectedProductIds(new Set());
+        setOriginalAssignedIds(new Set());
+        setShowAssignModal(true);
+        await fetchProductsForAssignment(group.id, 1, '');
+    };
+
+    const fetchProductsForAssignment = async (groupId: string, page: number, search: string) => {
+        try {
+            setAssignLoading(true);
+            const response = await api.get('/products/for-assignment', {
+                params: {
+                    page,
+                    limit: 10,
+                    search: search || undefined,
+                    excludeGroupId: groupId,
+                }
+            });
+
+            const products = response.data.products || [];
+            setAssignProducts(products);
+            setAssignTotalPages(response.data.pagination?.pages || 1);
+            setAssignTotal(response.data.pagination?.total || 0);
+
+            // On first load, track which products are already assigned to this group
+            if (page === 1 && !search) {
+                const alreadyAssigned = new Set<string>(
+                    products
+                        .filter((p: ProductForAssignment) => p.assignedToCurrentGroup)
+                        .map((p: ProductForAssignment) => p.id)
+                );
+                setOriginalAssignedIds(alreadyAssigned);
+                setSelectedProductIds(new Set(alreadyAssigned));
+            } else {
+                // For page changes/searches, maintain selection state
+                const newSelected = new Set(selectedProductIds);
+                products.forEach((p: ProductForAssignment) => {
+                    if (p.assignedToCurrentGroup) {
+                        newSelected.add(p.id);
+                    }
+                });
+                setSelectedProductIds(newSelected);
+            }
+        } catch (err: any) {
+            console.error('Error fetching products for assignment:', err);
+            setError(err.response?.data?.error || 'Failed to fetch products');
+        } finally {
+            setAssignLoading(false);
+        }
+    };
+
+    const handleAssignSearchChange = useCallback((value: string) => {
+        setAssignSearch(value);
+    }, []);
+
+    const handleAssignSearchSubmit = () => {
+        setAssignPage(1);
+        if (assigningGroup) {
+            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch);
+        }
+    };
+
+    const handleAssignPageChange = (newPage: number) => {
+        setAssignPage(newPage);
+        if (assigningGroup) {
+            fetchProductsForAssignment(assigningGroup.id, newPage, assignSearch);
+        }
+    };
+
+    const handleProductCheckChange = (productId: string, checked: boolean) => {
+        const newSelected = new Set(selectedProductIds);
+        if (checked) {
+            newSelected.add(productId);
+        } else {
+            newSelected.delete(productId);
+        }
+        setSelectedProductIds(newSelected);
+    };
+
+    const handleAssignSave = async () => {
+        if (!assigningGroup) return;
+
+        try {
+            setAssignLoading(true);
+            setError('');
+
+            // Determine which products to add and remove
+            const toAdd = Array.from(selectedProductIds).filter(id => !originalAssignedIds.has(id));
+            const toRemove = Array.from(originalAssignedIds).filter(id => !selectedProductIds.has(id));
+
+            let messages: string[] = [];
+
+            // Assign new products
+            if (toAdd.length > 0) {
+                const assignResponse = await api.post(`/making-groups/${assigningGroup.id}/assign-products`, {
+                    productIds: toAdd,
+                });
+                messages.push(assignResponse.data.message);
+            }
+
+            // Remove unselected products
+            if (toRemove.length > 0) {
+                const removeResponse = await api.post(`/making-groups/${assigningGroup.id}/remove-products`, {
+                    productIds: toRemove,
+                });
+                messages.push(removeResponse.data.message);
+            }
+
+            if (messages.length > 0) {
+                setSuccessMessage(messages.join('. '));
+            } else {
+                setSuccessMessage('No changes to save');
+            }
+
+            setShowAssignModal(false);
+            fetchMakingGroups();
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (err: any) {
+            console.error('Error saving product assignments:', err);
+            const errorMsg = err.response?.data?.error || 'Failed to save product assignments';
+            const conflicts = err.response?.data?.conflictingProducts;
+            if (conflicts && conflicts.length > 0) {
+                const conflictNames = conflicts.map((c: any) => c.title).slice(0, 3).join(', ');
+                setError(`${errorMsg}: ${conflictNames}${conflicts.length > 3 ? '...' : ''}`);
+            } else {
+                setError(errorMsg);
+            }
+        } finally {
+            setAssignLoading(false);
+        }
+    };
+
+    // ==================== END PRODUCT ASSIGNMENT HANDLERS ====================
+
     const getTypeLabel = (type: string) => {
         switch (type) {
             case 'per_gram':
@@ -162,7 +330,9 @@ export default function MakingGroups() {
         group.name,
         getTypeLabel(group.type),
         formatValue(group.type, group.value),
-        group._count?.products || 0,
+        <Button size="slim" onClick={() => handleManageProducts(group)}>
+            {group._count?.products || 0} products
+        </Button>,
         <ButtonGroup>
             <Button size="slim" onClick={() => handleEdit(group)}>
                 Edit
@@ -213,8 +383,8 @@ export default function MakingGroups() {
                         </EmptyState>
                     ) : (
                         <DataTable
-                            columnContentTypes={['text', 'text', 'text', 'numeric', 'text']}
-                            headings={['Name', 'Type', 'Value', 'Products Using', 'Actions']}
+                            columnContentTypes={['text', 'text', 'text', 'text', 'text']}
+                            headings={['Name', 'Type', 'Value', 'Products', 'Actions']}
                             rows={rows}
                         />
                     )}
@@ -313,6 +483,129 @@ export default function MakingGroups() {
                             ' This action cannot be undone.'
                         )}
                     </Text>
+                </Modal.Section>
+            </Modal>
+
+            {/* Product Assignment Modal */}
+            <Modal
+                open={showAssignModal}
+                onClose={() => setShowAssignModal(false)}
+                title={`Manage Products - ${assigningGroup?.name || ''}`}
+                primaryAction={{
+                    content: 'Save Changes',
+                    onAction: handleAssignSave,
+                    loading: assignLoading,
+                }}
+                secondaryActions={[
+                    {
+                        content: 'Cancel',
+                        onAction: () => setShowAssignModal(false),
+                    },
+                ]}
+                large
+            >
+                <Modal.Section>
+                    <BlockStack gap="400">
+                        <InlineStack gap="200" align="start">
+                            <div style={{ flex: 1 }}>
+                                <TextField
+                                    label=""
+                                    labelHidden
+                                    value={assignSearch}
+                                    onChange={handleAssignSearchChange}
+                                    placeholder="Search by SKU or title..."
+                                    autoComplete="off"
+                                    prefix={<Icon source={SearchIcon} />}
+                                    connectedRight={
+                                        <Button onClick={handleAssignSearchSubmit}>Search</Button>
+                                    }
+                                />
+                            </div>
+                        </InlineStack>
+
+                        <Text as="p" tone="subdued">
+                            {assignTotal} products found. Select products to add to this group.
+                        </Text>
+
+                        {assignLoading ? (
+                            <div style={{ textAlign: 'center', padding: '40px' }}>
+                                <Spinner size="large" />
+                            </div>
+                        ) : (
+                            <BlockStack gap="200">
+                                {assignProducts.map((product) => {
+                                    const isDisabled = product.assignedToOtherGroup;
+                                    const isChecked = selectedProductIds.has(product.id);
+
+                                    return (
+                                        <div
+                                            key={product.id}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                padding: '8px 12px',
+                                                borderRadius: '8px',
+                                                backgroundColor: isDisabled ? '#f1f1f1' : '#fff',
+                                                border: '1px solid #e1e1e1',
+                                                opacity: isDisabled ? 0.7 : 1,
+                                            }}
+                                        >
+                                            <Checkbox
+                                                label=""
+                                                labelHidden
+                                                checked={isChecked}
+                                                disabled={isDisabled}
+                                                onChange={(checked) =>
+                                                    handleProductCheckChange(product.id, checked)
+                                                }
+                                            />
+                                            <Thumbnail
+                                                source={product.imageUrl || 'https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png'}
+                                                alt={product.title}
+                                                size="small"
+                                            />
+                                            <div style={{ flex: 1 }}>
+                                                <Text as="p" fontWeight="semibold">
+                                                    {product.title}
+                                                </Text>
+                                                <Text as="p" tone="subdued">
+                                                    SKU: {product.sku || 'N/A'}
+                                                </Text>
+                                            </div>
+                                            {isDisabled && (
+                                                <Tooltip content={`Already assigned to: ${product.assignedGroupName}`}>
+                                                    <Badge tone="warning">
+                                                        Assigned to {product.assignedGroupName}
+                                                    </Badge>
+                                                </Tooltip>
+                                            )}
+                                            {product.assignedToCurrentGroup && (
+                                                <Badge tone="success">In this group</Badge>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {assignProducts.length === 0 && !assignLoading && (
+                                    <Text as="p" alignment="center" tone="subdued">
+                                        No products found.
+                                    </Text>
+                                )}
+                            </BlockStack>
+                        )}
+
+                        {assignTotalPages > 1 && (
+                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                                <Pagination
+                                    hasPrevious={assignPage > 1}
+                                    hasNext={assignPage < assignTotalPages}
+                                    onPrevious={() => handleAssignPageChange(assignPage - 1)}
+                                    onNext={() => handleAssignPageChange(assignPage + 1)}
+                                />
+                            </div>
+                        )}
+                    </BlockStack>
                 </Modal.Section>
             </Modal>
         </Page>
