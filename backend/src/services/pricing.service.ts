@@ -153,7 +153,9 @@ export class PricingService {
             wastagePct?: number;
             gstPct?: number;
             discount?: number;
+            discountType?: string;
         }
+
     ): Promise<number> {
         // Get shop settings for defaults
         const settings = await prisma.shopSettings.findUnique({
@@ -204,9 +206,41 @@ export class PricingService {
         const makingCharge = variables.making_flat! + (metalValue * variables.making_pct! / 100);
         const stoneValue = variables.stone_rate! * (variables.stone_wt || variables.stone_pieces || 0);
         const subtotal = metalValue + makingCharge + stoneValue;
-        const total = subtotal * (1 + variables.gst_pct! / 100) - variables.discount!;
+        const gstAmount = subtotal * (variables.gst_pct! / 100);
+        const subtotalPlusGst = subtotal + gstAmount;
 
-        return Math.round(total * 100) / 100;
+        // 2. Per-Product Discount
+        let productDiscountAmount = 0;
+        const pDiscValue = product.discount ?? 0;
+        const pDiscType = product.discountType || 'flat';
+
+        // 1. Global Default Discount
+        let globalDiscountAmount = 0;
+        const gDiscValue = settings?.defaultDiscount ?? 0;
+        const gDiscType = (settings as any)?.defaultDiscountType || 'flat';
+
+        if (pDiscValue > 0) {
+            // OVERRIDE: If product discount is set, skip global discount
+            if (pDiscType === 'percent') {
+                productDiscountAmount = subtotalPlusGst * (pDiscValue / 100);
+            } else {
+                productDiscountAmount = pDiscValue;
+            }
+        } else if (gDiscValue > 0) {
+            // Only apply global discount if no product discount is set
+            if (gDiscType === 'percent') {
+                globalDiscountAmount = subtotalPlusGst * (gDiscValue / 100);
+            } else {
+                globalDiscountAmount = gDiscValue;
+            }
+        }
+
+
+
+        const finalPrice = Math.max(0, subtotalPlusGst - globalDiscountAmount - productDiscountAmount);
+
+        return Math.round(finalPrice * 100) / 100;
+
     }
 
     /**
@@ -237,8 +271,11 @@ export class PricingService {
                         makingChargePct: product.makingChargePct || undefined,
                         wastagePct: product.wastagePct || undefined,
                         gstPct: product.gstPct || undefined,
-                        discount: product.discount || undefined,
+                        discount: (product as any).discount || undefined,
+                        discountType: (product as any).discountType || undefined,
                     };
+
+
                     const newPrice = await this.calculateProductPrice(shopId, pricingProduct);
                     const oldPrice = product.currentPrice;
                     const delta = oldPrice ? newPrice - oldPrice : 0;

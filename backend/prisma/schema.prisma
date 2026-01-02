@@ -36,6 +36,7 @@ model ShopSettings {
   defaultWastagePct            Float    @default(0)
   defaultGstPct                Float    @default(3)
   defaultDiscount              Float    @default(0)
+  defaultDiscountType          String   @default("flat")
   defaultMakingChargeType      String   @default("per_gram")
   defaultMakingChargeValue     Float    @default(1500)
   defaultMetalDiscountType     String   @default("none")
@@ -131,7 +132,7 @@ model ProductGemstone {
   gemstoneType       String
   naturalOrLabgrown  String?
   quality            String?
-  shape              String?
+  shape             String?
   gemstoneCut        String?
   gemstoneColor      String?
   gemstoneClarity    String?
@@ -172,13 +173,15 @@ model Product {
   isManualGemstonePrice Boolean           @default(false)
   manualGemstoneWeight  Float?
   manualGemstonePrice   Float?
+  discount              Float?
+  discountType          String?           @default("flat")
   useCustomFormula      Boolean           @default(false)
+
   customFormula         String?
   makingChargeFlat      Float?
   makingChargePct       Float?
   wastagePct            Float?
   gstPct                Float?
-  discount              Float?
   currentPrice          Float?
   lastCalculatedPrice   Float?
   lastPushedPrice       Float?

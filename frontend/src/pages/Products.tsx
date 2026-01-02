@@ -32,8 +32,11 @@ interface ProductGemstone {
     gemstoneCaratRange?: string;
     gemstoneWeight?: number;
     gemstonePieces?: number;
-    discountType?: string;
     discountValue?: number;
+    discountType?: string;
+    quality?: string;
+    shape?: string;
+    naturalOrLabgrown?: string;
 }
 
 interface Product {
@@ -77,7 +80,10 @@ interface Product {
 
     // Multiple gemstones
     gemstones?: ProductGemstone[];
+    discount?: number;
+    discountType?: string;
 }
+
 
 interface PriceBreakdown {
     metal_name: string;
@@ -119,9 +125,15 @@ interface PriceBreakdown {
     gst_amount: number;
     gst_pct: number;
     discount: number;
+    global_discount_value?: number;
+    global_discount_type?: string;
+    product_discount?: number;
+    product_discount_value?: number;
+    product_discount_type?: string;
     total: number;
     total_original?: number;
 }
+
 
 export default function Products() {
     const [products, setProducts] = useState<Product[]>([]);
@@ -158,6 +170,9 @@ export default function Products() {
     const [editGemstoneCut, setEditGemstoneCut] = useState('');
     const [editGemstoneColor, setEditGemstoneColor] = useState('');
     const [editGemstoneClarity, setEditGemstoneClarity] = useState('');
+    const [editDiscount, setEditDiscount] = useState('');
+    const [editDiscountType, setEditDiscountType] = useState('flat');
+
     const [editGemstoneCaratRange, setEditGemstoneCaratRange] = useState('');
     const [editStonePieces, setEditStonePieces] = useState('');
     const [editStoneWeight, setEditStoneWeight] = useState('');
@@ -192,6 +207,9 @@ export default function Products() {
     const [gemstoneModalWeight, setGemstoneModalWeight] = useState('');
     const [gemstoneModalPieces, setGemstoneModalPieces] = useState('');
     const [gemstoneModalPricingType, setGemstoneModalPricingType] = useState<'perCarat' | 'perPiece' | null>(null);
+    const [gemstoneModalQuality, setGemstoneModalQuality] = useState('');
+    const [gemstoneModalShape, setGemstoneModalShape] = useState('');
+    const [gemstoneModalNaturalOrLabgrown, setGemstoneModalNaturalOrLabgrown] = useState('');
     const [gemstoneModalDiscountType, setGemstoneModalDiscountType] = useState('');
     const [gemstoneModalDiscountValue, setGemstoneModalDiscountValue] = useState('');
 
@@ -439,8 +457,11 @@ export default function Products() {
                 enamelWeightGrams: product.enamelWeightGrams,
                 enamelDiscountType: product.enamelDiscountType,
                 enamelDiscountValue: product.enamelDiscountValue,
+                discount: product.discount,
+                discountType: product.discountType,
                 gemstones: gemstonesToSend,
             });
+
             console.log('fetchPriceBreakdown - response gemstones:', response.data.breakdown?.gemstone_details);
             setPriceBreakdown(response.data.breakdown);
         } catch (error) {
@@ -483,8 +504,11 @@ export default function Products() {
                 enamelWeightGrams: editEnamelWeightGrams ? parseFloat(editEnamelWeightGrams) : null,
                 enamelDiscountType: editEnamelDiscountType !== 'none' ? editEnamelDiscountType : null,
                 enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
+                discount: editDiscount ? parseFloat(editDiscount) : 0,
+                discountType: editDiscountType,
                 gemstones: productGemstones,
             });
+
             console.log('Price breakdown response:', response.data.breakdown);
             console.log('Gemstones sent:', productGemstones);
             setPriceBreakdown(response.data.breakdown);
@@ -503,6 +527,9 @@ export default function Products() {
         setGemstoneModalCaratRange('');
         setGemstoneModalWeight('');
         setGemstoneModalPieces('');
+        setGemstoneModalQuality('');
+        setGemstoneModalShape('');
+        setGemstoneModalNaturalOrLabgrown('');
         setGemstoneModalDiscountType('');
         setGemstoneModalDiscountValue('');
         setShowGemstoneModal(true);
@@ -518,6 +545,9 @@ export default function Products() {
         setGemstoneModalCaratRange(gem.gemstoneCaratRange || '');
         setGemstoneModalWeight(gem.gemstoneWeight?.toString() || '');
         setGemstoneModalPieces(gem.gemstonePieces?.toString() || '');
+        setGemstoneModalQuality((gem as any).quality || '');
+        setGemstoneModalShape((gem as any).shape || '');
+        setGemstoneModalNaturalOrLabgrown((gem as any).naturalOrLabgrown || '');
         setGemstoneModalDiscountType(gem.discountType || '');
         setGemstoneModalDiscountValue(gem.discountValue?.toString() || '');
         setShowGemstoneModal(true);
@@ -534,7 +564,10 @@ export default function Products() {
             gemstoneCaratRange: gemstoneModalCaratRange || undefined,
             gemstoneWeight: gemstoneModalWeight ? parseFloat(gemstoneModalWeight) : undefined,
             gemstonePieces: gemstoneModalPieces ? parseInt(gemstoneModalPieces) : undefined,
-            discountType: gemstoneModalDiscountType || undefined,
+            quality: gemstoneModalQuality || undefined,
+            shape: gemstoneModalShape || undefined,
+            naturalOrLabgrown: gemstoneModalNaturalOrLabgrown || undefined,
+            discountType: (gemstoneModalDiscountType as any) || undefined,
             discountValue: gemstoneModalDiscountValue ? parseFloat(gemstoneModalDiscountValue) : undefined,
         };
 
@@ -603,6 +636,9 @@ export default function Products() {
         setEditMakingDiscountValue(product.makingDiscountValue?.toString() || '');
         setEditGemstoneDiscountType(product.gemstoneDiscountType || 'none');
         setEditGemstoneDiscountValue(product.gemstoneDiscountValue?.toString() || '');
+        setEditDiscount(product.discount?.toString() || '');
+        setEditDiscountType(product.discountType || 'flat');
+
 
         setEditEnamelColor(product.enamelColor || '');
         setEditEnamelWeightGrams(product.enamelWeightGrams?.toString() || '');
@@ -650,7 +686,10 @@ export default function Products() {
                 makingDiscountValue: editMakingDiscountValue ? parseFloat(editMakingDiscountValue) : null,
                 gemstoneDiscountType: editGemstoneDiscountType !== 'none' ? editGemstoneDiscountType : null,
                 gemstoneDiscountValue: editGemstoneDiscountValue ? parseFloat(editGemstoneDiscountValue) : null,
+                discount: editDiscount ? parseFloat(editDiscount) : null,
+                discountType: editDiscountType,
                 enamelColor: editEnamelColor || null,
+
                 enamelWeightGrams: editEnamelWeightGrams ? parseFloat(editEnamelWeightGrams) : null,
                 enamelDiscountType: editEnamelDiscountType !== 'none' ? editEnamelDiscountType : null,
                 enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
@@ -777,6 +816,8 @@ export default function Products() {
                     enamelWeightGrams: editEnamelWeightGrams ? parseFloat(editEnamelWeightGrams) : null,
                     enamelDiscountType: editEnamelDiscountType !== 'none' ? editEnamelDiscountType : null,
                     enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
+                    discount: editDiscount ? parseFloat(editDiscount) : 0,
+                    discountType: editDiscountType,
                     gemstones: productGemstones.map(g => ({
                         ...g,
                         discountValue: g.discountValue ? parseFloat(g.discountValue.toString()) : null,
@@ -812,8 +853,10 @@ export default function Products() {
         editMakingDiscountType, editMakingDiscountValue,
         editGemstoneDiscountType, editGemstoneDiscountValue,
         editEnamelColor, editEnamelWeightGrams, editEnamelDiscountType, editEnamelDiscountValue,
+        editDiscount, editDiscountType,
         productGemstones, // Add gemstones to dependency array
     ]);
+
 
     const formatCurrency = (amount?: number) => {
         if (amount === null || amount === undefined) return '-';
@@ -876,7 +919,7 @@ export default function Products() {
             const isExpanded = expandedGroupId === groupId;
 
             displayRows.push([
-                <Text as="span" variant="bodyMd" tone="subdued">{globalIndex}</Text>,
+                globalIndex.toString(),
                 <div style={{
                     padding: '8px 0',
                     minWidth: '280px',
@@ -1073,7 +1116,7 @@ export default function Products() {
                             ) : (
                                 <>
                                     <DataTable
-                                        columnContentTypes={['numeric', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'numeric', 'text']}
+                                        columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
                                         headings={['#', 'Image', 'Status', 'SKU', 'Title', 'Metal', 'Karat', 'Weight', 'Gemstone', 'Current Price', 'Action']}
                                         rows={groupedInfo.displayRows}
                                     />
@@ -1402,6 +1445,37 @@ export default function Products() {
                                         />
                                     )}
                                 </BlockStack>
+
+                                <BlockStack gap="200">
+                                    <Text variant="headingSm" as="h4">Overall Product Discount</Text>
+                                    <InlineStack gap="300" wrap={false}>
+                                        <div style={{ flex: 1 }}>
+                                            <Select
+                                                label="Type"
+                                                options={[
+                                                    { label: 'Amount (₹)', value: 'flat' },
+                                                    { label: 'Percentage (%)', value: 'percent' },
+                                                ]}
+                                                value={editDiscountType}
+                                                onChange={setEditDiscountType}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 2 }}>
+                                            <TextField
+                                                label="Value"
+                                                type="number"
+                                                value={editDiscount}
+                                                onChange={setEditDiscount}
+                                                prefix={editDiscountType === 'flat' ? '₹' : ''}
+                                                suffix={editDiscountType === 'percent' ? '%' : ''}
+                                                autoComplete="off"
+                                                helpText={`Applied as ${editDiscountType} discount after GST.`}
+                                            />
+                                        </div>
+                                    </InlineStack>
+                                </BlockStack>
+
+
                             </BlockStack>
                         </Card>
 
@@ -1563,12 +1637,26 @@ export default function Products() {
                                                         </tr>
                                                         {priceBreakdown.discount > 0 && (
                                                             <tr>
-                                                                <td style={{ padding: '8px 16px', color: '#d82c0d' }}>Discount</td>
+                                                                <td style={{ padding: '8px 16px', color: '#d82c0d' }}>
+                                                                    Shop Discount ({priceBreakdown.global_discount_value || 0}{priceBreakdown.global_discount_type === 'percent' ? '%' : '₹'})
+                                                                </td>
                                                                 <td style={{ padding: '8px 16px', textAlign: 'right', color: '#d82c0d' }}>
                                                                     -₹{(priceBreakdown.discount / 100).toFixed(2)}
                                                                 </td>
                                                             </tr>
                                                         )}
+                                                        {(priceBreakdown.product_discount || 0) > 0 ? (
+                                                            <tr>
+                                                                <td style={{ padding: '8px 16px', color: '#d82c0d' }}>
+                                                                    Product Discount ({priceBreakdown.product_discount_value || 0}{priceBreakdown.product_discount_type === 'percent' ? '%' : '₹'})
+                                                                </td>
+                                                                <td style={{ padding: '8px 16px', textAlign: 'right', color: '#d82c0d' }}>
+                                                                    -₹{((priceBreakdown.product_discount || 0) / 100).toFixed(2)}
+                                                                </td>
+                                                            </tr>
+                                                        ) : null}
+
+
                                                         <tr style={{ backgroundColor: '#f0fdf4', borderTop: '1px solid #ced4da' }}>
                                                             <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: '15px', color: '#008060' }}>Final Price</td>
                                                             <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: '#008060' }}>
@@ -1674,6 +1762,44 @@ export default function Products() {
                             options={getUniqueGemstoneTypes()}
                             value={gemstoneModalType}
                             onChange={setGemstoneModalType}
+                        />
+
+                        <Select
+                            label="Stone Type (Optional)"
+                            options={[
+                                { label: 'None', value: '' },
+                                { label: 'Natural', value: 'natural' },
+                                { label: 'Labgrown', value: 'labgrown' },
+                            ]}
+                            value={gemstoneModalNaturalOrLabgrown}
+                            onChange={setGemstoneModalNaturalOrLabgrown}
+                        />
+
+                        <Select
+                            label="Quality (Optional)"
+                            options={[
+                                { label: 'None', value: '' },
+                                { label: 'Precious', value: 'precious' },
+                                { label: 'Semi-Precious', value: 'semi_precious' },
+                                { label: 'Kundan', value: 'kundan' },
+                                { label: 'Gemstone', value: 'gemstone' },
+                            ]}
+                            value={gemstoneModalQuality}
+                            onChange={setGemstoneModalQuality}
+                        />
+
+                        <Select
+                            label="Shape (Optional)"
+                            options={[
+                                { label: 'None', value: '' },
+                                { label: 'Oval', value: 'oval' },
+                                { label: 'Round', value: 'round' },
+                                { label: 'Square', value: 'square' },
+                                { label: 'Rectangle', value: 'rectangle' },
+                                { label: 'Pear', value: 'pear' },
+                            ]}
+                            value={gemstoneModalShape}
+                            onChange={setGemstoneModalShape}
                         />
 
                         <Select

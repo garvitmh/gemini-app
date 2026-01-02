@@ -129,7 +129,26 @@
           </td>
         </tr>
         
-        {% comment %} Final Price Row {% endcomment %}
+        {% comment %} Shop Discount Row {% endcomment %}
+        {% if breakdown_json.discount > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #d93025;">Shop Discount</td>
+            <td style="padding: 10px 16px; text-align: right; color: #d93025;">
+              Rs. {{ breakdown_json.discount | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+        {% endif %}
+
+        {% comment %} Product Discount Row {% endcomment %}
+        {% if breakdown_json.product_discount > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #d93025;">Product Discount</td>
+            <td style="padding: 10px 16px; text-align: right; color: #d93025;">
+              Rs. {{ breakdown_json.product_discount | times: 0.01 | round: 2 }}
+            </td>
+          </tr>
+        {% endif %}
+
         <tr style="background-color: #f0fdf4;">
           <td style="padding: 12px 16px; color: #166534; font-weight: 600; font-size: 15px;">
             Final Price

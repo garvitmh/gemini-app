@@ -195,15 +195,26 @@
           </td>
         </tr>
         
-        {% comment %} Discount Row (if applicable) {% endcomment %}
+        {% comment %} Shop Discount Row {% endcomment %}
         {% if breakdown.discount > 0 %}
           <tr style="border-bottom: 1px solid #f1f2f3;">
-            <td style="padding: 10px 16px; color: #d93025;">Discount</td>
+            <td style="padding: 10px 16px; color: #d93025;">Shop Discount</td>
             <td style="padding: 10px 16px; text-align: right; color: #d93025;">
               -{{ breakdown.discount | times: 0.01 | money }}
             </td>
           </tr>
         {% endif %}
+
+        {% comment %} Product Discount Row {% endcomment %}
+        {% if breakdown.product_discount > 0 %}
+          <tr style="border-bottom: 1px solid #f1f2f3;">
+            <td style="padding: 10px 16px; color: #d93025;">Product Discount</td>
+            <td style="padding: 10px 16px; text-align: right; color: #d93025;">
+              -{{ breakdown.product_discount | times: 0.01 | money }}
+            </td>
+          </tr>
+        {% endif %}
+
         
         {% comment %} Final Price Row {% endcomment %}
         <tr style="background-color: #f0fdf4;">

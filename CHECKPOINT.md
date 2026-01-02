@@ -1,3 +1,32 @@
+# System Checkpoint: pre-massive-audit-baseline
+
+**Date:** 2026-01-02
+**Commit Label:** `checkpoint/pre-massive-audit-baseline`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application baseline after a comprehensive feature audit. It captures the current stable state of all core jewelry management modules, pricing logic, and Shopify integrations before any further large-scale modifications.
+
+### Verified Stable Features
+1.  **Full Feature Audit Completed**
+    - [x] All backend routes (Rates, Products, Settings, Automation) documented.
+    - [x] Core pricing service math verified (Karat-conversions, Wastage, Making charges).
+    - [x] Shopify Sync (Pagination & Bulk Ops) confirmed stable.
+2.  **Frontend State**
+    - [x] Dashboard live rate display verified.
+    - [x] Rates Management for Metals, Stones, and Enamels verified.
+    - [x] Product Editor with real-time price preview verified.
+3.  **Integration State**
+    - [x] Liquid template `SHOPIFY-LIQUID-COMPLETE.liquid` is current.
+    - [x] DB Schema matches current models (Audit, History, Jobs).
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/pre-massive-audit-baseline`.
+2.  **Revert**: `git reset --hard checkpoint/pre-massive-audit-baseline`
+3.  **Verify**: Reload the Dashboard and check if Live Rates populate correctly.
+
+---
+
 # System Checkpoint: discount-breakdown-fix-stable
 
 **Date:** 2025-12-29

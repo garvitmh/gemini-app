@@ -28,7 +28,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper to calculate price and breakdown
 const calculateProductPrice = async (product: any, ratePerGram: number, stoneRate: any | null, settings: any, enamelRate: any | null = null) => {
-    console.log('✨ calculateProductPrice - product.gemstones:', product.gemstones);
+
     const weight = product.weightGrams || 0;
     const metalValueRaw = ratePerGram * weight;
 
@@ -40,8 +40,9 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
         ? product.makingChargeValue
         : (settings.defaultMakingChargeValue ?? 1500);
 
-    const gstPct = settings.defaultGstPct ?? 3;
-    const discount = settings.defaultDiscount ?? 0;
+    const gstPct = settings?.defaultGstPct ?? 3;
+    const discount = settings?.defaultDiscount ?? 0; // Explicitly default to 0
+    const pDisc = product.discount ?? 0; // Explicitly default to 0
 
     const wastageAmount = metalValueRaw * (wastagePct / 100);
     const metalValue = metalValueRaw + wastageAmount;
@@ -192,9 +193,41 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
     // Final Calculation
     const subtotal = finalMetalValue + finalMakingCharge + finalGemstoneCost + finalEnamelCost;
     const gstAmount = subtotal * (gstPct / 100);
-    const finalPrice = subtotal + gstAmount - discount; // Global discount (legacy)
+    const subtotalPlusGst = subtotal + gstAmount;
+
+    // 2. Per-Product Discount (Applied AFTER GST, according to specification)
+    let productDiscountAmount = 0;
+    const pDiscValue = product.discount ?? 0;
+    const pDiscType = product.discountType || 'flat';
+
+    // 1. Global Default Discount (Applied BEFORE per-product)
+    let globalDiscountAmount = 0;
+    const gDiscValue = settings?.defaultDiscount ?? 0;
+    const gDiscType = settings?.defaultDiscountType || 'flat';
+
+    if (pDiscValue > 0) {
+        // OVERRIDE: If product discount is set, skip global discount
+        if (pDiscType === 'percent') {
+            productDiscountAmount = subtotalPlusGst * (pDiscValue / 100);
+        } else {
+            productDiscountAmount = pDiscValue;
+        }
+    } else if (gDiscValue > 0) {
+        // Only apply global discount if no product discount is set
+        if (gDiscType === 'percent') {
+            globalDiscountAmount = subtotalPlusGst * (gDiscValue / 100);
+        } else {
+            globalDiscountAmount = gDiscValue;
+        }
+    }
+
+
+    const finalPrice = Math.max(0, subtotalPlusGst - globalDiscountAmount - productDiscountAmount);
+
+
 
     // Store all values × 100 for precision and consistency
+
     return {
         price: finalPrice,
         breakdown: {
@@ -231,16 +264,23 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
             subtotal: Math.round(subtotal * 100),
             gst_amount: Math.round(gstAmount * 100),
             gst_pct: gstPct,
-            discount: Math.round(discount * 100), // Global discount
+            discount: Math.round(globalDiscountAmount * 100), // Global discount
+            global_discount_value: gDiscValue,
+            global_discount_type: gDiscType,
+            product_discount: Math.round(productDiscountAmount * 100), // Per-product discount
+            product_discount_value: pDiscValue,
+            product_discount_type: pDiscType,
+
             total: Math.round(finalPrice * 100),
-            total_original: Math.round((metalValue + makingCharge + gemstoneCost + enamelCost + ((metalValue + makingCharge + gemstoneCost + enamelCost) * (gstPct / 100)) - discount) * 100),
+            total_original: Math.round((subtotalPlusGst) * 100), // Subtotal + GST BEFORE any shop discounts applied
+
 
             // Discount Flags
             has_metal_discount: finalMetalValue < metalValue,
             has_making_discount: finalMakingCharge < makingCharge,
             has_gemstone_discount: finalGemstoneCost < gemstoneCost,
             has_enamel_discount: finalEnamelCost < enamelCost,
-            has_any_discount: (finalPrice < (metalValue + makingCharge + gemstoneCost + enamelCost + ((metalValue + makingCharge + gemstoneCost + enamelCost) * (gstPct / 100)) - discount))
+            has_any_discount: finalPrice < subtotalPlusGst
         }
     };
 };
@@ -388,8 +428,16 @@ const generateBreakdownHtml = (breakdown: any) => {
     if (breakdown.discount > 0) {
         html += `
                 <tr style="border-bottom: 1px solid #f1f2f3;">
-                    <td style="padding: 10px 16px; color: #d93025;">Discount</td>
+                    <td style="padding: 10px 16px; color: #d93025;">Shop Discount</td>
                     <td style="padding: 10px 16px; text-align: right; color: #d93025;">-₹${fmt(breakdown.discount)}</td>
+                </tr>`;
+    }
+
+    if (breakdown.product_discount > 0) {
+        html += `
+                <tr style="border-bottom: 1px solid #f1f2f3;">
+                    <td style="padding: 10px 16px; color: #d93025;">Product Discount</td>
+                    <td style="padding: 10px 16px; text-align: right; color: #d93025;">-₹${fmt(breakdown.product_discount)}</td>
                 </tr>`;
     }
 
@@ -1407,8 +1455,7 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
             'gemstones_json'
         ];
 
-        console.log('🔍 [DIAGNOSTIC] Actual Headers:', actualHeaders);
-        console.log('🔍 [DIAGNOSTIC] Expected Headers:', expectedHeaders);
+
 
         for (const expected of expectedHeaders) {
             if (!actualHeaders.includes(expected)) {
@@ -1462,7 +1509,7 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
 
             // PHASE 3: Required Field Assertions (First Data Row)
             if (!firstDataRowProcessed) {
-                console.log(`🔍 [DIAGNOSTIC] Asserting first data row (SKU: ${skuStr})`);
+
                 if (!row.metal) throw new Error(`PHASE 3: Missing required field "metal" in row ${rowIndex}`);
                 if (row.karat === undefined || row.karat === null) throw new Error(`PHASE 3: Missing required field "karat" in row ${rowIndex}`);
                 if (row.weightGrams === undefined || row.weightGrams === null) throw new Error(`PHASE 3: Missing required field "weightGrams" in row ${rowIndex}`);
@@ -1528,7 +1575,7 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                 const hasJsonColumn = row.gemstones_json !== undefined;
 
                 if (rowIndex === 4) { // Log for a sample row
-                    console.log(`🔍 [DIAGNOSTIC] Gemstone path for SKU ${skuStr}: hasExpanded=${hasExpandedColumns}, hasJson=${hasJsonColumn}`);
+
                 }
 
                 const reconstructedGemstones: any[] = [];
@@ -1773,10 +1820,13 @@ app.put('/api/products/:id', async (req, res) => {
                 metalDiscountValue: req.body.metalDiscountValue !== undefined ? parseFloat(req.body.metalDiscountValue) : null,
                 makingDiscountType: req.body.makingDiscountType || null,
                 makingDiscountValue: req.body.makingDiscountValue !== undefined ? parseFloat(req.body.makingDiscountValue) : null,
-                gemstoneDiscountType: req.body.gemstoneDiscountType || null,
                 gemstoneDiscountValue: req.body.gemstoneDiscountValue !== undefined ? parseFloat(req.body.gemstoneDiscountValue) : null,
-            },
-            include: { shop: true }
+                discount: req.body.discount !== undefined ? parseFloat(req.body.discount) : undefined,
+                discountType: req.body.discountType || undefined,
+            } as any,
+            include: { shop: { include: { settings: true } } }
+
+
         });
 
         // 3. Handle gemstones separately if provided
@@ -1929,19 +1979,19 @@ app.put('/api/products/:id', async (req, res) => {
 app.post('/api/products/calculate-price', async (req, res) => {
     try {
         const {
-            weightGrams, metal, karat,
-            gemstoneType, gemstoneCut, gemstoneColor,
-            gemstoneClarity, gemstoneCaratRange,
-            stonePieces, stoneWeightCarat,
-            isManualGemstonePrice, manualGemstoneWeight, manualGemstonePrice,
+            weightGrams, metal, karat, gemstoneType, gemstoneCut,
+            gemstoneColor, gemstoneClarity, gemstoneCaratRange,
+            stonePieces, stoneWeightCarat, isManualGemstonePrice,
+            manualGemstoneWeight, manualGemstonePrice,
             makingChargeType, makingChargeValue,
             metalDiscountType, metalDiscountValue,
             makingDiscountType, makingDiscountValue,
             gemstoneDiscountType, gemstoneDiscountValue,
+            discount, // NEW: Extract discount for per-product discount support
+            discountType, // NEW: Phase B
             enamelColor, enamelWeightGrams, enamelDiscountType, enamelDiscountValue,
             gemstones
         } = req.body;
-        console.log('🔍 req.body.gemstones:', req.body.gemstones);
 
         const shop = await prisma.shop.findFirst({ include: { settings: true } });
         if (!shop) return res.status(404).json({ error: 'Shop not found' });
@@ -1972,12 +2022,15 @@ app.post('/api/products/calculate-price', async (req, res) => {
             makingDiscountValue: makingDiscountValue ? parseFloat(makingDiscountValue) : null,
             gemstoneDiscountType: gemstoneDiscountType || null,
             gemstoneDiscountValue: gemstoneDiscountValue ? parseFloat(gemstoneDiscountValue) : null,
+            discount: discount ? parseFloat(discount) : 0, // NEW: Include per-product discount
+            discountType: discountType || 'flat', // NEW: Phase B
             enamelColor: enamelColor || null,
             enamelWeightGrams: enamelWeightGrams ? parseFloat(enamelWeightGrams) : null,
             enamelDiscountType: enamelDiscountType || null,
             enamelDiscountValue: enamelDiscountValue ? parseFloat(enamelDiscountValue) : null,
             gemstones: gemstones || [],
         };
+
 
         if (!tempProduct.weightGrams || !tempProduct.metal) {
             return res.json({ breakdown: null });
@@ -2021,14 +2074,12 @@ app.post('/api/products/calculate-price', async (req, res) => {
 
         const { breakdown } = await calculateProductPrice(tempProduct, metalRate.ratePerGram, stoneRate, settings);
         res.json({ breakdown });
-
     } catch (error) {
         console.error('Calculation error:', error);
         res.status(500).json({ error: 'Failed to calculate price' });
     }
 });
 
-// Get price breakdown for a product
 app.get('/api/products/:id/price-breakdown', async (req, res) => {
     try {
         const { id } = req.params;

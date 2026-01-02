@@ -5,8 +5,8 @@ import {
     Card,
     TextField,
     Select,
-    Button,
     BlockStack,
+    InlineStack,
     Banner,
     Text,
 } from '@shopify/polaris';
@@ -29,6 +29,7 @@ interface Settings {
     defaultWastagePct: number;
     defaultGstPct: number;
     defaultDiscount: number;
+    defaultDiscountType: string;
     emailNotifications: boolean;
     notificationEmail?: string;
 }
@@ -48,12 +49,12 @@ export default function Settings() {
         defaultWastagePct: 0,
         defaultGstPct: 3,
         defaultDiscount: 0,
+        defaultDiscountType: 'flat',
         emailNotifications: true,
     });
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [applyingToAll, setApplyingToAll] = useState(false);
-    const [applyResult, setApplyResult] = useState<any>(null);
 
     useEffect(() => {
         fetchSettings();
@@ -89,10 +90,9 @@ export default function Settings() {
         }
 
         setApplyingToAll(true);
-        setApplyResult(null);
+
         try {
             const response = await api.post('/settings/apply-to-all');
-            setApplyResult(response.data);
             setSuccessMessage(`Successfully applied settings to ${response.data.successCount} products!`);
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
@@ -190,8 +190,36 @@ export default function Settings() {
                                 autoComplete="off"
                             />
 
-                            <Text variant="headingMd" as="h3">Global Discounts</Text>
-                            <Text as="p" tone="subdued">Set default discounts for all products.</Text>
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Default Overall Discount</Text>
+                                <InlineStack gap="300" wrap={false}>
+                                    <div style={{ flex: 1 }}>
+                                        <Select
+                                            label="Type"
+                                            options={[
+                                                { label: 'Amount (₹)', value: 'flat' },
+                                                { label: 'Percentage (%)', value: 'percent' },
+                                            ]}
+                                            value={settings.defaultDiscountType}
+                                            onChange={(val) => setSettings({ ...settings, defaultDiscountType: val })}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 2 }}>
+                                        <TextField
+                                            label="Value"
+                                            type="number"
+                                            value={settings.defaultDiscount.toString()}
+                                            onChange={(val) => setSettings({ ...settings, defaultDiscount: parseFloat(val) || 0 })}
+                                            prefix={settings.defaultDiscountType === 'flat' ? '₹' : ''}
+                                            suffix={settings.defaultDiscountType === 'percent' ? '%' : ''}
+                                            autoComplete="off"
+                                        />
+                                    </div>
+                                </InlineStack>
+                            </BlockStack>
+
+                            <Text variant="headingMd" as="h3">Component Discounts</Text>
+                            <Text as="p" tone="subdued">Set default discounts for specific components.</Text>
 
                             {/* Metal Discount */}
                             <BlockStack gap="200">
@@ -304,37 +332,6 @@ export default function Settings() {
                                     )}
                                 </BlockStack>
                             </BlockStack>
-
-                            <TextField
-                                label="Default Discount ₹"
-                                type="number"
-                                value={String(settings.defaultDiscount)}
-                                onChange={(value) =>
-                                    setSettings({ ...settings, defaultDiscount: parseFloat(value) || 0 })
-                                }
-                                autoComplete="off"
-                            />
-                        </BlockStack>
-                    </Card>
-                </Layout.Section>
-
-                <Layout.Section>
-                    <Card>
-                        <BlockStack gap="400">
-                            <Text variant="headingMd" as="h3">
-                                Notifications
-                            </Text>
-
-                            <TextField
-                                label="Notification Email"
-                                type="email"
-                                value={settings.notificationEmail || ''}
-                                onChange={(value) =>
-                                    setSettings({ ...settings, notificationEmail: value })
-                                }
-                                placeholder="your@email.com"
-                                autoComplete="off"
-                            />
                         </BlockStack>
                     </Card>
                 </Layout.Section>
