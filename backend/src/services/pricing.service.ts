@@ -294,7 +294,16 @@ export class PricingService {
     static async calculateBulkPrices(
         shopId: string,
         productIds: string[]
-    ): Promise<Array<{ productId: string; oldPrice: number | null; newPrice: number; delta: number; deltaPct: number }>> {
+    ): Promise<Array<{
+        productId: string;
+        sku?: string | null;
+        title?: string;
+        oldPrice: number | null;
+        newPrice: number;
+        delta: number;
+        deltaPct: number;
+        error?: string;
+    }>> {
         const products = await prisma.product.findMany({
             where: { shopId, id: { in: productIds } },
         });

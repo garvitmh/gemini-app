@@ -262,12 +262,42 @@ router.post('/sync', async (req: Request, res: Response) => {
         }
 
         const shopifyService = await ShopifyService.forShop(shopDomain);
-        const syncedCount = await shopifyService.syncProducts(shop.id);
 
-        res.json({ success: true, syncedCount });
+        // Trigger background sync (do not await)
+        shopifyService.syncProducts(shop.id).catch(err => console.error("Background sync failed:", err));
+
+        res.json({ success: true, message: "Sync started in background" });
     } catch (error) {
         console.error('Error syncing products:', error);
         res.status(500).json({ error: 'Failed to sync products' });
+    }
+});
+
+// Get Sync Status
+router.get('/sync/status', async (req: Request, res: Response) => {
+    try {
+        const shopDomain = res.locals.shopify.session.shop;
+        const shop = await prisma.shop.findUnique({ where: { domain: shopDomain } });
+
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        const latestJob = await prisma.job.findFirst({
+            where: {
+                shopId: shop.id,
+                jobType: 'product_sync'
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({
+            success: true,
+            job: latestJob
+        });
+    } catch (error) {
+        console.error('Error fetching sync status:', error);
+        res.status(500).json({ error: 'Failed to fetch sync status' });
     }
 });
 
