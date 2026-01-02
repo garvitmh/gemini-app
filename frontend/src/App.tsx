@@ -7,6 +7,7 @@ import Rates from './pages/Rates';
 import Products from './pages/Products';
 import History from './pages/History';
 import Settings from './pages/Settings';
+import MakingGroups from './pages/MakingGroups';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 // @ts-ignore - JSON import
@@ -24,6 +25,7 @@ function App() {
                             <Route path="/products" element={<Products />} />
                             <Route path="/history" element={<History />} />
                             <Route path="/settings" element={<Settings />} />
+                            <Route path="/making-groups" element={<MakingGroups />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     </Layout>

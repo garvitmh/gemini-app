@@ -21,6 +21,7 @@ model Shop {
   automationRules AutomationRule[]
   enamelColors    EnamelColor[]
   enamelRates     EnamelRate[]
+  makingGroups    MakingGroup[]
   metalRates      MetalRate[]
   products        Product[]
   settings        ShopSettings?
@@ -126,6 +127,21 @@ model EnamelColor {
   @@index([shopId])
 }
 
+model MakingGroup {
+  id        String    @id @default(cuid())
+  shopId    String
+  name      String
+  type      String
+  value     Float
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  products  Product[]
+
+  @@unique([shopId, name])
+  @@index([shopId])
+}
+
 model ProductGemstone {
   id                 String   @id @default(cuid())
   productId          String
@@ -210,9 +226,11 @@ model Product {
   gemstoneOverrideColor        String?
   grossGoldWeight              Float?
   autoGrossGoldWeight          Boolean           @default(false)
+  makingGroupId                String?
   priceBreakdownHtml    String?
   priceHistory          PriceHistory[]
   shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  makingGroup           MakingGroup?      @relation(fields: [makingGroupId], references: [id], onDelete: SetNull)
   gemstones             ProductGemstone[]
 
   @@index([shopId, shopifyProductId])

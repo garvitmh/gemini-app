@@ -7,6 +7,7 @@ import {
     ProductIcon,
     ClockIcon,
     SettingsIcon,
+    CollectionIcon,
 } from '@shopify/polaris-icons';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 
@@ -32,6 +33,13 @@ export default function Layout({ children }: LayoutProps) {
             url: '/rates',
             selected: location.pathname === '/rates',
             onClick: () => navigate('/rates'),
+        },
+        {
+            label: 'Making Groups',
+            icon: CollectionIcon,
+            url: '/making-groups',
+            selected: location.pathname === '/making-groups',
+            onClick: () => navigate('/making-groups'),
         },
         {
             label: 'Products',

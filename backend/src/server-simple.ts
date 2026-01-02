@@ -48,11 +48,26 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
 
     // Defaults
     const wastagePct = settings.defaultWastagePct ?? 2;
-    // Making charge lookup: Product override > Shop Default > Fallback
-    const makingChargeType = product.makingChargeType || settings.defaultMakingChargeType || 'per_gram';
-    const makingChargeValue = (product.makingChargeValue !== undefined && product.makingChargeValue !== null && !isNaN(product.makingChargeValue))
-        ? product.makingChargeValue
-        : (settings.defaultMakingChargeValue ?? 1500);
+
+    // Making charge lookup with strict priority: Product override > Making Group > Global Default
+    let makingChargeType: string;
+    let makingChargeValue: number;
+
+    // Priority 1: Product-level override (EXISTING)
+    if (product.makingChargeType && product.makingChargeValue !== undefined && product.makingChargeValue !== null && !isNaN(product.makingChargeValue)) {
+        makingChargeType = product.makingChargeType;
+        makingChargeValue = product.makingChargeValue;
+    }
+    // Priority 2: Making Group (NEW)
+    else if (product.makingGroup && product.makingGroup.type && product.makingGroup.value !== undefined) {
+        makingChargeType = product.makingGroup.type;
+        makingChargeValue = product.makingGroup.value;
+    }
+    // Priority 3: Global default (EXISTING)
+    else {
+        makingChargeType = settings.defaultMakingChargeType || 'per_gram';
+        makingChargeValue = settings.defaultMakingChargeValue ?? 1500;
+    }
 
     const gstPct = settings?.defaultGstPct ?? 3;
     const discount = settings?.defaultDiscount ?? 0; // Explicitly default to 0
@@ -983,6 +998,192 @@ app.delete('/api/enamel-rates/:id', async (req, res) => {
     }
 });
 
+// ==================== MAKING GROUPS API ====================
+
+// Get all making groups
+app.get('/api/making-groups', async (req, res) => {
+    try {
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        const makingGroups = await prisma.makingGroup.findMany({
+            where: { shopId: shop.id },
+            include: {
+                _count: {
+                    select: { products: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        res.json({ makingGroups });
+    } catch (error) {
+        console.error('Error fetching making groups:', error);
+        res.status(500).json({ error: 'Failed to fetch making groups' });
+    }
+});
+
+// Create making group
+app.post('/api/making-groups', async (req, res) => {
+    try {
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        const { name, type, value } = req.body;
+
+        // Validation
+        if (!name || !name.trim()) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
+        if (!type || !['per_gram', 'flat', 'percent'].includes(type)) {
+            return res.status(400).json({ error: 'Type must be per_gram, flat, or percent' });
+        }
+        if (value === undefined || value === null || parseFloat(value) <= 0) {
+            return res.status(400).json({ error: 'Value must be greater than 0' });
+        }
+
+        // Check for duplicate name
+        const existing = await prisma.makingGroup.findFirst({
+            where: {
+                shopId: shop.id,
+                name: name.trim()
+            }
+        });
+
+        if (existing) {
+            return res.status(400).json({ error: 'A making group with this name already exists' });
+        }
+
+        const makingGroup = await prisma.makingGroup.create({
+            data: {
+                shopId: shop.id,
+                name: name.trim(),
+                type,
+                value: parseFloat(value),
+            },
+        });
+
+        console.log(`✅ Created making group: ${name} (${type}, ₹${value})`);
+
+        res.json({ success: true, makingGroup });
+    } catch (error) {
+        console.error('Error creating making group:', error);
+        res.status(500).json({ error: 'Failed to create making group' });
+    }
+});
+
+//Update making group
+app.put('/api/making-groups/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        // Verify making group belongs to shop
+        const existing = await prisma.makingGroup.findFirst({
+            where: { id, shopId: shop.id }
+        });
+
+        if (!existing) {
+            return res.status(404).json({ error: 'Making group not found' });
+        }
+
+        const { name, type, value } = req.body;
+
+        // Validation
+        if (name !== undefined && (!name || !name.trim())) {
+            return res.status(400).json({ error: 'Name cannot be empty' });
+        }
+        if (type !== undefined && !['per_gram', 'flat', 'percent'].includes(type)) {
+            return res.status(400).json({ error: 'Type must be per_gram, flat, or percent' });
+        }
+        if (value !== undefined && (value === null || parseFloat(value) <= 0)) {
+            return res.status(400).json({ error: 'Value must be greater than 0' });
+        }
+
+        // Check for duplicate name if name is being changed
+        if (name && name.trim() !== existing.name) {
+            const duplicate = await prisma.makingGroup.findFirst({
+                where: {
+                    shopId: shop.id,
+                    name: name.trim(),
+                    id: { not: id }
+                }
+            });
+
+            if (duplicate) {
+                return res.status(400).json({ error: 'A making group with this name already exists' });
+            }
+        }
+
+        const makingGroup = await prisma.makingGroup.update({
+            where: { id },
+            data: {
+                ...(name !== undefined && { name: name.trim() }),
+                ...(type !== undefined && { type }),
+                ...(value !== undefined && { value: parseFloat(value) }),
+            },
+        });
+
+        console.log(`✅ Updated making group: ${makingGroup.name}`);
+
+        res.json({ success: true, makingGroup });
+    } catch (error) {
+        console.error('Error updating making group:', error);
+        res.status(500).json({ error: 'Failed to update making group' });
+    }
+});
+
+// Delete making group
+app.delete('/api/making-groups/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        // Verify making group belongs to shop
+        const makingGroup = await prisma.makingGroup.findFirst({
+            where: { id, shopId: shop.id },
+            include: {
+                _count: {
+                    select: { products: true }
+                }
+            }
+        });
+
+        if (!makingGroup) {
+            return res.status(404).json({ error: 'Making group not found' });
+        }
+
+        // Check if any products are using this group
+        if (makingGroup._count.products > 0) {
+            return res.status(400).json({
+                error: `Cannot delete: ${makingGroup._count.products} product(s) are using this making group. Please reassign them first.`
+            });
+        }
+
+        await prisma.makingGroup.delete({ where: { id } });
+
+        console.log(`✅ Deleted making group: ${makingGroup.name}`);
+
+        res.json({ success: true, message: 'Making group deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting making group:', error);
+        res.status(500).json({ error: 'Failed to delete making group' });
+    }
+});
+
+// ==================== END MAKING GROUPS API ====================
+
+
 // Get audit logs
 app.get('/api/audit', async (req, res) => {
     try {
@@ -1072,7 +1273,10 @@ app.get('/api/products', async (req, res) => {
                 skip,
                 take: parseInt(limit as string),
                 orderBy: { updatedAt: 'desc' },
-                include: { gemstones: true },
+                include: {
+                    gemstones: true,
+                    makingGroup: true,
+                },
             }),
             prisma.product.count({ where }),
         ]);
@@ -1919,8 +2123,12 @@ app.put('/api/products/:id', async (req, res) => {
                 autoGrossGoldWeight: req.body.autoGrossGoldWeight === true || req.body.autoGrossGoldWeight === 'true',
                 discount: req.body.discount !== undefined ? parseFloat(req.body.discount) : undefined,
                 discountType: req.body.discountType || undefined,
+                makingGroupId: req.body.makingGroupId || null,
             } as any,
-            include: { shop: { include: { settings: true } } }
+            include: {
+                shop: { include: { settings: true } },
+                makingGroup: true,
+            }
 
 
         });
