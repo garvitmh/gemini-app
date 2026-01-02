@@ -2422,7 +2422,7 @@ app.put('/api/products/:id', async (req, res) => {
         // 4. Re-calculate price based on new parameters
         const productWithGemstones = await prisma.product.findUnique({
             where: { id },
-            include: { gemstones: true },
+            include: { gemstones: true, makingGroup: true },
         });
 
         forensicLog(`   Step 1: WeightGrams=${productWithGemstones?.weightGrams}, Metal=${productWithGemstones?.metal}`);
@@ -2549,7 +2549,7 @@ app.post('/api/products/calculate-price', async (req, res) => {
             discount, // NEW: Extract discount for per-product discount support
             discountType, // NEW: Phase B
             enamelColor, enamelWeightGrams, enamelDiscountType, enamelDiscountValue,
-            gemstones
+            gemstones, makingGroupId
         } = req.body;
 
         const shop = await prisma.shop.findFirst({ include: { settings: true } });
@@ -2588,12 +2588,21 @@ app.post('/api/products/calculate-price', async (req, res) => {
             enamelDiscountType: enamelDiscountType || null,
             enamelDiscountValue: enamelDiscountValue ? parseFloat(enamelDiscountValue) : null,
             gemstones: gemstones || [],
-            gemstoneOverridePricePerPiece: req.body.gemstoneOverridePricePerPiece !== undefined ? parseFloat(req.body.gemstoneOverridePricePerPiece) : null,
-            gemstoneOverridePieces: req.body.gemstoneOverridePieces !== undefined ? parseInt(req.body.gemstoneOverridePieces) : null,
             gemstoneOverrideColor: req.body.gemstoneOverrideColor || null,
             grossGoldWeight: req.body.grossGoldWeight !== undefined ? parseFloat(req.body.grossGoldWeight) : null,
             autoGrossGoldWeight: req.body.autoGrossGoldWeight === true || req.body.autoGrossGoldWeight === 'true',
         };
+
+        // Fetch Making Group if provided
+        if (makingGroupId) {
+            const makingGroup = await prisma.makingGroup.findUnique({
+                where: { id: makingGroupId }
+            });
+            if (makingGroup) {
+                tempProduct.makingGroup = makingGroup;
+                // Don't need to manually set type/value here, calculateProductPrice handles product.makingGroup priority
+            }
+        }
 
 
         if (!tempProduct.weightGrams || !tempProduct.metal) {
@@ -2753,7 +2762,7 @@ app.post('/api/settings/apply-to-all', async (req, res) => {
                 weightGrams: { not: null },
                 metal: { not: null }
             },
-            include: { gemstones: true }
+            include: { gemstones: true, makingGroup: true }
         });
 
         console.log(`\n🔄 Applying settings to ${products.length} products...`);

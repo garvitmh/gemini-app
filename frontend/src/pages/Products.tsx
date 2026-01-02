@@ -91,6 +91,14 @@ interface Product {
     gemstoneOverrideColor?: string;
     grossGoldWeight?: number;
     autoGrossGoldWeight?: boolean;
+
+    makingGroupId?: string | null;
+    makingGroup?: { name: string } | null;
+}
+
+interface MakingGroup {
+    id: string;
+    name: string;
 }
 
 
@@ -190,6 +198,8 @@ export default function Products() {
     // Making Charge Overrides
     const [editMakingChargeType, setEditMakingChargeType] = useState('');
     const [editMakingChargeValue, setEditMakingChargeValue] = useState('');
+    const [makingGroups, setMakingGroups] = useState<MakingGroup[]>([]);
+    const [editMakingGroupId, setEditMakingGroupId] = useState('');
 
     // Discount Overrides
     const [editMetalDiscountType, setEditMetalDiscountType] = useState('none');
@@ -250,7 +260,17 @@ export default function Products() {
     useEffect(() => {
         fetchProducts();
         fetchAllGemstoneRates();
+        fetchMakingGroups();
     }, [debouncedSearch, currentPage]);
+
+    const fetchMakingGroups = async () => {
+        try {
+            const res = await api.get('/making-groups', { params: { limit: 100 } });
+            setMakingGroups(res.data.makingGroups || []);
+        } catch (e) {
+            console.error('Error fetching making groups', e);
+        }
+    };
 
     // Fetch all gemstone rates for dynamic dropdowns
     const fetchAllGemstoneRates = async () => {
@@ -505,6 +525,7 @@ export default function Products() {
                 isManualGemstonePrice: editIsManualGemstonePrice,
                 manualGemstoneWeight: editManualGemstoneWeight,
                 manualGemstonePrice: editManualGemstonePrice,
+                makingGroupId: editMakingGroupId || undefined,
                 makingChargeType: editMakingChargeType || undefined,
                 makingChargeValue: editMakingChargeValue && parseFloat(editMakingChargeValue) > 0 ? parseFloat(editMakingChargeValue) : undefined,
                 metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
@@ -675,6 +696,7 @@ export default function Products() {
 
         setEditMakingChargeType(product.makingChargeType || '');
         setEditMakingChargeValue(product.makingChargeValue?.toString() || '');
+        setEditMakingGroupId(product.makingGroupId || '');
 
         setEditIsManualGemstonePrice(product.isManualGemstonePrice || false);
         setEditManualGemstoneWeight(product.manualGemstoneWeight?.toString() || '');
@@ -732,6 +754,7 @@ export default function Products() {
                 isManualGemstonePrice: editIsManualGemstonePrice,
                 manualGemstoneWeight: editManualGemstoneWeight ? parseFloat(editManualGemstoneWeight) : null,
                 manualGemstonePrice: editManualGemstonePrice ? parseFloat(editManualGemstonePrice) : null,
+                makingGroupId: editMakingGroupId || null,
                 makingChargeType: editMakingChargeType || null,
                 makingChargeValue: editMakingChargeValue ? parseFloat(editMakingChargeValue) : undefined,
                 metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
@@ -878,6 +901,7 @@ export default function Products() {
                     isManualGemstonePrice: editIsManualGemstonePrice,
                     manualGemstoneWeight: editManualGemstoneWeight,
                     manualGemstonePrice: editManualGemstonePrice,
+                    makingGroupId: editMakingGroupId || undefined,
                     makingChargeType: editMakingChargeType,
                     makingChargeValue: editMakingChargeValue,
                     metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
@@ -928,7 +952,8 @@ export default function Products() {
         editGemstoneDiscountType, editGemstoneDiscountValue,
         editEnamelColor, editEnamelWeightGrams, editEnamelDiscountType, editEnamelDiscountValue,
         editDiscount, editDiscountType,
-        productGemstones, // Add gemstones to dependency array
+        editDiscount, editDiscountType,
+        productGemstones, editMakingGroupId
     ]);
 
 
@@ -1446,7 +1471,20 @@ export default function Products() {
 
                         <Card>
                             <BlockStack gap="400">
-                                <Text as="h3" variant="headingMd">Making Charges (Override)</Text>
+                                <Text as="h3" variant="headingMd">Making Charges Configuration</Text>
+
+                                <Select
+                                    label="Assigned Making Group"
+                                    options={[
+                                        { label: 'None (Use Shop Default)', value: '' },
+                                        ...makingGroups.map(g => ({ label: g.name, value: g.id }))
+                                    ]}
+                                    value={editMakingGroupId}
+                                    onChange={setEditMakingGroupId}
+                                    helpText="Select a Making Group to apply its pricing rules. Can be overriden below."
+                                />
+
+                                <Text as="h4" variant="headingSm">Override (Optional)</Text>
                                 <Select
                                     label="Charge Type"
                                     options={[
