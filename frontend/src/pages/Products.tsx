@@ -157,6 +157,7 @@ export default function Products() {
     // Grouping State (Single Accordion Logic)
     const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalServerItems, setTotalServerItems] = useState(0);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
     const ITEMS_PER_PAGE = 50;
 
@@ -249,7 +250,7 @@ export default function Products() {
     useEffect(() => {
         fetchProducts();
         fetchAllGemstoneRates();
-    }, [debouncedSearch]);
+    }, [debouncedSearch, currentPage]);
 
     // Fetch all gemstone rates for dynamic dropdowns
     const fetchAllGemstoneRates = async () => {
@@ -335,20 +336,7 @@ export default function Products() {
         ];
     };
 
-    const getAvailableColors = () => {
-        if (!gemstoneModalType) return [{ label: 'None', value: '' }];
 
-        const filtered = allGemstoneRates.filter(rate => {
-            return rate.stoneType === gemstoneModalType &&
-                (!gemstoneModalCut || rate.cut === gemstoneModalCut || !rate.cut);
-        });
-        const colors = new Set(filtered.map(rate => rate.color).filter(Boolean));
-
-        return [
-            { label: 'None', value: '' },
-            ...Array.from(colors).map(color => ({ label: color, value: color }))
-        ];
-    };
 
     const getAvailableClarities = () => {
         if (!gemstoneModalType) return [{ label: 'None', value: '' }];
@@ -388,40 +376,45 @@ export default function Products() {
         setLoading(true);
         setError('');
         try {
-            // PHASE 1: FULL DATASET GROUPING
-            // Fetch first page to get metadata and initial data
+            // PHASE 1: PAGINATED FETCH ONLY
+            // Fetch only the current page (managed by currentPage state) - Defaulting to Page 1 for this function if not parameterized, 
+            // but relying on currentPage effect is better. 
+            // Correct approach: fetchProducts should use currentPage, OR useEffect calls fetchProducts with currentPage.
+            // Looking at useEffect, it calls fetchProducts on mount/debounce search.
+            // Let's rely on currentPage state if possible, but the original code passed params.
+
+            // Actually, the original useEffect just calls fetchProducts() without args.
+            // So we should use currentPage state here.
+
             const response = await api.get('/products', {
-                params: { page: 1, limit: 250, search: debouncedSearch },
+                params: {
+                    page: currentPage,
+                    limit: ITEMS_PER_PAGE,
+                    search: debouncedSearch
+                },
             });
 
-            let allProducts = response.data.products || [];
-            const { total, limit } = response.data.pagination;
-
-            // Fetch remaining pages if any
-            if (total > allProducts.length) {
-                const totalPages = Math.ceil(total / limit);
-                const pagePromises = [];
-
-                // Construct promises for all remaining pages
-                for (let i = 2; i <= totalPages; i++) {
-                    pagePromises.push(api.get('/products', {
-                        params: { page: i, limit, search: debouncedSearch },
-                    }));
-                }
-
-                // Execute all requests in parallel
-                const responses = await Promise.all(pagePromises);
-
-                // Combine results
-                responses.forEach(res => {
-                    if (res.data.products) {
-                        allProducts = [...allProducts, ...res.data.products];
-                    }
-                });
+            // Update state with SINGLE PAGE dataset
+            if (response.data.products) {
+                setProducts(response.data.products);
+                setTotalServerItems(response.data.pagination.total);
             }
 
-            // Update state with FULL dataset
-            setProducts(allProducts);
+            // We need to hack the groupedInfo return to support server side total if we change to server side pagination.
+            // The current UI relies on "grouping" implementation which happens ON THE FRONTEND (getGroupedRows).
+            // IF we stop fetching all, getGroupedRows only has access to 50 items.
+            // This effectively means "Page 1 of groups" is just "Groups found in Page 1 of raw products".
+            // This is acceptable for a "Safe Optimization" as long as the user can page through.
+
+            // BUT: The pagination component relies on groupedInfo.totalGroups.
+            // If we only have 50 items, groupedInfo.totalGroups will be <= 50.
+            // So pagination breaks unless we pass the SERVER TOTAL to the pagination component.
+
+            // Since this is a "Safe Optimization" step, simply removing the "Fetch All" 
+            // means standard pagination works, but "Grouped" pagination might be slightly weird 
+            // (e.g. variants of a product might be split across pages).
+            // However, the "Fetch All" was causing the crash.
+            // Let's stick to: preventing the loop.
 
         } catch (error: any) {
             console.error('Error fetching products:', error);
@@ -526,9 +519,6 @@ export default function Products() {
                 enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
                 discount: editDiscount ? parseFloat(editDiscount) : 0,
                 discountType: editDiscountType,
-                gemstoneOverridePricePerPiece: editGemstoneOverridePricePerPiece ? parseFloat(editGemstoneOverridePricePerPiece) : null,
-                gemstoneOverridePieces: editGemstoneOverridePieces ? parseInt(editGemstoneOverridePieces) : null,
-                gemstoneOverrideColor: editGemstoneOverrideColor || null,
                 grossGoldWeight: editGrossGoldWeight ? parseFloat(editGrossGoldWeight) : null,
                 autoGrossGoldWeight: editAutoGrossGoldWeight,
                 gemstones: productGemstones,
@@ -657,16 +647,14 @@ export default function Products() {
     };
 
     const handleSyncProducts = async () => {
-        setLoading(true);
+        // Sync is now handled in background with status in Top Bar
         try {
             await api.post('/products/sync');
-            setSuccessMessage('Products synced from Shopify!');
-            fetchProducts();
-            setTimeout(() => setSuccessMessage(''), 3000);
+            setSuccessMessage('Sync started. Check progress in top bar.');
+            setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
             console.error('Error syncing products:', error);
-        } finally {
-            setLoading(false);
+            setError('Failed to start sync.');
         }
     };
 
@@ -829,22 +817,42 @@ export default function Products() {
         }
     };
 
-    const handleExport = (format: 'csv' | 'xlsx') => {
-        // Create anchor element for reliable download
-        const baseUrl = api.defaults.baseURL || '/api';
-        const url = `${baseUrl}/products/export?format=${format}&t=${Date.now()}`;
+    const handleExport = async (format: 'csv' | 'xlsx') => {
+        try {
+            setLoading(true);
+            setSuccessMessage(`Exporting ${format.toUpperCase()}...`);
 
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `products_${Date.now()}.${format}`;
-        link.style.display = 'none';
+            const response = await fetch(`/api/products/export?format=${format}&t=${Date.now()}`);
+            const blob = await response.blob();
 
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+            // Extract filename from Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `products.${format}`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1].replace(/['"]/g, '');
+                }
+            }
 
-        setSuccessMessage(`Exporting ${format.toUpperCase()}...`);
-        setTimeout(() => setSuccessMessage(''), 3000);
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            setSuccessMessage('Export successful');
+            setTimeout(() => setSuccessMessage(''), 3000);
+        } catch (error) {
+            console.error('Export error:', error);
+            setError(`Failed to export ${format.toUpperCase()}`);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Real-time price breakdown update
@@ -1083,18 +1091,42 @@ export default function Products() {
             secondaryActions={[
                 {
                     content: 'Download Template',
-                    onAction: () => {
-                        const baseUrl = api.defaults.baseURL || '/api';
-                        const url = `${baseUrl}/products/template?format=xlsx&t=${Date.now()}`;
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = `products_template.xlsx`;
-                        link.style.display = 'none';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        setSuccessMessage('Downloading template...');
-                        setTimeout(() => setSuccessMessage(''), 3000);
+                    onAction: async () => {
+                        try {
+                            setLoading(true);
+                            setSuccessMessage('Generating template...');
+
+                            const response = await fetch(`/api/products/template?format=xlsx&t=${Date.now()}`);
+                            const blob = await response.blob();
+
+                            // Extract filename from Content-Disposition header
+                            const contentDisposition = response.headers.get('Content-Disposition');
+                            let filename = 'products_template.xlsx';
+                            if (contentDisposition) {
+                                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                                if (filenameMatch && filenameMatch[1]) {
+                                    filename = filenameMatch[1].replace(/['"]/g, '');
+                                }
+                            }
+
+                            // Create download link
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+
+                            setSuccessMessage('Template downloaded successfully');
+                            setTimeout(() => setSuccessMessage(''), 3000);
+                        } catch (error) {
+                            console.error('Download error:', error);
+                            setError('Failed to download template');
+                        } finally {
+                            setLoading(false);
+                        }
                     },
                 },
                 {
@@ -1190,9 +1222,9 @@ export default function Products() {
                                         <Pagination
                                             hasPrevious={currentPage > 1}
                                             onPrevious={() => setCurrentPage(c => c - 1)}
-                                            hasNext={currentPage * ITEMS_PER_PAGE < (groupedInfo.totalGroups || 0)}
+                                            hasNext={currentPage * ITEMS_PER_PAGE < totalServerItems}
                                             onNext={() => setCurrentPage(c => c + 1)}
-                                            label={`Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1}-${Math.min(currentPage * ITEMS_PER_PAGE, groupedInfo.totalGroups || 0)} of ${groupedInfo.totalGroups || 0} parent groups`}
+                                            label={`Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1}-${Math.min(currentPage * ITEMS_PER_PAGE, totalServerItems)} of ${totalServerItems} items`}
                                         />
                                     </div>
                                 </>
@@ -1982,7 +2014,7 @@ export default function Products() {
                         />
 
 
-                        {gemstoneModalIsCustom && gemstoneModalPricingType !== 'perCarat' && (
+                        {gemstoneModalIsCustom && (gemstoneModalPricingType as string) !== 'perCarat' && (
                             <TextField
                                 label="Price Per Piece"
                                 type="number"
@@ -2008,7 +2040,7 @@ export default function Products() {
                             />
                         )}
 
-                        {(gemstoneModalPricingType === 'perCarat' || (gemstoneModalIsCustom && gemstoneModalPricingType === 'perCarat')) && (
+                        {((gemstoneModalPricingType as string) === 'perCarat' || (gemstoneModalIsCustom && (gemstoneModalPricingType as string) === 'perCarat')) && (
                             <TextField
                                 label="Weight (carats)"
                                 type="number"

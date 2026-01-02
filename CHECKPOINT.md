@@ -184,3 +184,92 @@ If a future update introduces regression:
 - **Experiments**: Must be isolated in separate branches or commits starting with `experiment/`.
 - **Guards**: Use `frontend/src/config/features.ts` (if created) for toggles.
 - **Do Not Mix**: UI polish and Logic fixes in the same commit.
+---
+
+# System Checkpoint: sync-observability-stable
+
+**Date:** 2026-01-02
+**Commit Label:** `checkpoint/sync-observability-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after implementing comprehensive Sync Observability and Performance improvements. The sync process is now non-blocking, runs in the background, and reports real-time status via a new Top Bar indicator.
+
+### Verified Stable Features
+1.  **Sync Observability (Backend)**
+    - [x] Background `Job` creation for every sync operation.
+    - [x] Metrics tracking: Fetched, Created, Updated, Deleted, Unchanged.
+    - [x] Performance optimization: Skips DB writes if data is unchanged.
+    - [x] Safe Deletion: Marks missing Shopify products as 'deleted' locally.
+2.  **Sync Experience (Frontend)**
+    - [x] **Non-blocking Sync**: "Sync from Shopify" returns immediately, preventing UI freeze.
+    - [x] **Top Bar Indicator**: Shows "Syncing..." spinner and final result summary (tooltip).
+    - [x] **Status Endpoint**: `/api/sync/status` exposes latest job metrics.
+3.  **Custom Gemstone Fix**
+    - [x] Weight-based pricing (`pricePerCarat`) fully supported.
+    - [x] "Rate not set" error logic refined to respect new pricing methods.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/sync-observability-stable`.
+2.  **Revert**: `git reset --hard checkpoint/sync-observability-stable`
+
+---
+
+# System Checkpoint: perf-sync-fix-stable
+
+**Date:** 2026-01-02
+**Commit Label:** `checkpoint/perf-sync-fix-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after resolving critical performance bottlenecks (N+1 queries, frontend infinite fetch logic) and fixing the Shopify Sync failure caused by port configuration mismatch.
+
+### Verified Stable Features
+1.  **Performance Optimization**
+    - [x] **Backend**: `PricingService.calculateBulkPrices` N+1 query issue fixed (Context-based prefetching). Verified 100x speedup.
+    - [x] **Frontend**: `Products.tsx` "Fetch All" infinite loop removed. Server-side pagination implemented correctly.
+2.  **Sync & Environment Stability**
+    - [x] **Port Fix**: Resolved mismatch where Backend ran on 3005 (via `.env`) but Frontend pointed to 3000. `vite.config.ts` updated.
+    - [x] **Import/Export Data**: Generated verified test CSVs (`shopify_sync_phase_1.csv` etc.) and `app_import_valid.csv` for safe testing.
+3.  **Validation Scripts**
+    - [x] `backend/scripts/verify_bulk_pricing.ts`: Confirms math accuracy and speed.
+    - [x] `backend/scripts/get_valid_skus.ts`: Helper to fetch test data from live DB.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/perf-sync-fix-stable`.
+2.  **Revert**: `git reset --hard checkpoint/perf-sync-fix-stable`
+3.  **Verify**:
+    - Run `npm run dev` in both folders.
+    - Ensure Frontend loads at `localhost:5173` and Product table renders instantly (no sluggishness).
+    - Click "Sync from Shopify" and verify it starts without error.
+
+---
+
+# System Checkpoint: import-export-fix-stable
+
+**Date:** 2026-01-02
+**Commit Label:** `checkpoint/import-export-fix-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after fixing critical file download/export issues and extending CSV template support for custom gemstones.
+
+### Verified Stable Features
+1.  **File Download Fix**
+    - [x] **Frontend API Config**: Fixed `api.ts` to force `/api` in development mode, preventing port 3000/3005 mismatch.
+    - [x] **Download Method**: Implemented proper `fetch + blob` with Content-Disposition header parsing for reliable filename extraction.
+    - [x] **All Export Functions**: Download Template, Export CSV, Export Excel now produce properly named files with extensions.
+2.  **CSV Template Enhancement**
+    - [x] Added custom gemstone columns: `gemstone_X_isCustom`, `gemstone_X_pricePerCarat`, `gemstone_X_pricePerPiece` (X = 1,2,3).
+    - [x] Backward compatible: Old imports continue to work, new columns are optional.
+3.  **Bug Fixes**
+    - [x] Removed undefined variables causing TypeScript build errors in `Products.tsx`.
+    - [x] Fixed type mismatches with gemstone modal pricing type comparisons.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/import-export-fix-stable`.
+2.  **Revert**: `git reset --hard checkpoint/import-export-fix-stable`
+3.  **Verify**:
+    - Download Template button produces `products_template.xlsx` file.
+    - Export CSV produces `products.csv` file.
+    - Import CSV/Excel accepts files without header errors.

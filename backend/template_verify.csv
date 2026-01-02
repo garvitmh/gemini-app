@@ -1,0 +1,5 @@
+SKU,Title,weightGrams,metal,karat,makingChargeType,makingChargeValue,CurrentPrice,gemstone_1_type,gemstone_1_cut,gemstone_1_color,gemstone_1_clarity,gemstone_1_weight,gemstone_1_pieces,gemstone_2_type,gemstone_2_cut,gemstone_2_color,gemstone_2_clarity,gemstone_2_weight,gemstone_2_pieces,gemstone_3_type,gemstone_3_cut,gemstone_3_color,gemstone_3_clarity,gemstone_3_weight,gemstone_3_pieces,gemstones_json
+Example: GOLD-RING-001,Example: Gold Ring with Diamond,Example: 5.5,Example: gold,Example: 22,per_gram/percent/flat,Example: 1500,(Read-only),diamond,Excellent,D,VS1,0.5,1,,,,,,,,,,,,,(Optional: Only if you need more than 3 gemstones)
+NOTE:,Fill gemstone columns directly. Supports up to 3 gemstones. Leave blank if not applicable.,,,,,,Auto-calculated. Do not edit.,,,,,,,,,,,,,,,,,,,
+GOLD-RING-001,Sample 22K Gold Ring,5.5,gold,22,per_gram,1500,,diamond,Excellent,D,VS1,0.5,1,,,,,,,,,,,,,
+SILVER-BRACE-001,Sample 925 Silver Bracelet,15,silver,925,flat,500,,,,,,,,,,,,,,,,,,,,

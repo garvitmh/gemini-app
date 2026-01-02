@@ -2,11 +2,11 @@ import axios from 'axios';
 import axiosRetry from 'axios-retry';
 
 // Use environment variable for API URL with /api path
-// In development: http://localhost:3000/api
-// In production: /api (uses same domain)
-const apiBaseURL = import.meta.env.VITE_API_URL
-    ? `${import.meta.env.VITE_API_URL}/api`
-    : '/api';
+// In development: Force relative path to use Vite Proxy (avoids port 3000 vs 3005 mismatch)
+// In production: Use VITE_API_URL or default to same domain
+const apiBaseURL = import.meta.env.DEV
+    ? '/api'
+    : (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
 
 const api = axios.create({
     baseURL: apiBaseURL,

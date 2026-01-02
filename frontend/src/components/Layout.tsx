@@ -8,6 +8,7 @@ import {
     ClockIcon,
     SettingsIcon,
 } from '@shopify/polaris-icons';
+import { SyncStatusIndicator } from './SyncStatusIndicator';
 
 interface LayoutProps {
     children: ReactNode;
@@ -57,6 +58,13 @@ export default function Layout({ children }: LayoutProps) {
 
     return (
         <Frame
+            topBar={
+                <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: '56px', background: '#fff', borderBottom: '1px solid #dfe3e8' }}>
+                    <div style={{ marginRight: '16px' }}>
+                        <SyncStatusIndicator />
+                    </div>
+                </div>
+            }
             navigation={
                 <Navigation location="/">
                     <Navigation.Section items={navigationItems} />
