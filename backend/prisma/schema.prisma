@@ -142,6 +142,8 @@ model ProductGemstone {
   unitType           String   @default("carat")
   discountType       String?
   discountValue      Float?
+  isCustom           Boolean  @default(false)
+  pricePerPiece      Float?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -203,6 +205,11 @@ model Product {
   gemstoneQuality       String?
   gemstoneShape         String?
   naturalOrLabgrown     String?
+  gemstoneOverridePricePerPiece Float?
+  gemstoneOverridePieces       Int?
+  gemstoneOverrideColor        String?
+  grossGoldWeight              Float?
+  autoGrossGoldWeight          Boolean           @default(false)
   priceBreakdownHtml    String?
   priceHistory          PriceHistory[]
   shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)

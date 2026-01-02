@@ -18,6 +18,7 @@ import {
     EmptyState,
     SkeletonBodyText,
     Pagination,
+    Checkbox,
 } from '@shopify/polaris';
 import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
@@ -37,6 +38,9 @@ interface ProductGemstone {
     quality?: string;
     shape?: string;
     naturalOrLabgrown?: string;
+    isCustom?: boolean;
+    pricePerPiece?: number;
+    pricePerCarat?: number;
 }
 
 interface Product {
@@ -82,6 +86,11 @@ interface Product {
     gemstones?: ProductGemstone[];
     discount?: number;
     discountType?: string;
+    gemstoneOverridePricePerPiece?: number;
+    gemstoneOverridePieces?: number;
+    gemstoneOverrideColor?: string;
+    grossGoldWeight?: number;
+    autoGrossGoldWeight?: boolean;
 }
 
 
@@ -209,9 +218,13 @@ export default function Products() {
     const [gemstoneModalPricingType, setGemstoneModalPricingType] = useState<'perCarat' | 'perPiece' | null>(null);
     const [gemstoneModalQuality, setGemstoneModalQuality] = useState('');
     const [gemstoneModalShape, setGemstoneModalShape] = useState('');
-    const [gemstoneModalNaturalOrLabgrown, setGemstoneModalNaturalOrLabgrown] = useState('');
     const [gemstoneModalDiscountType, setGemstoneModalDiscountType] = useState('');
     const [gemstoneModalDiscountValue, setGemstoneModalDiscountValue] = useState('');
+
+    const [gemstoneModalNaturalOrLabgrown, setGemstoneModalNaturalOrLabgrown] = useState('');
+    const [gemstoneModalIsCustom, setGemstoneModalIsCustom] = useState(false);
+    const [gemstoneModalPricePerPiece, setGemstoneModalPricePerPiece] = useState('');
+    const [gemstoneModalPricePerCarat, setGemstoneModalPricePerCarat] = useState('');
 
     // All configured gemstone rates for dynamic dropdowns
     const [allGemstoneRates, setAllGemstoneRates] = useState<any[]>([]);
@@ -223,6 +236,10 @@ export default function Products() {
     const [editIsManualGemstonePrice, setEditIsManualGemstonePrice] = useState(false);
     const [editManualGemstoneWeight, setEditManualGemstoneWeight] = useState('');
     const [editManualGemstonePrice, setEditManualGemstonePrice] = useState('');
+
+
+    const [editGrossGoldWeight, setEditGrossGoldWeight] = useState<string>('');
+    const [editAutoGrossGoldWeight, setEditAutoGrossGoldWeight] = useState<boolean>(false);
 
     // Import state
     const [showImportModal, setShowImportModal] = useState(false);
@@ -459,6 +476,9 @@ export default function Products() {
                 enamelDiscountValue: product.enamelDiscountValue,
                 discount: product.discount,
                 discountType: product.discountType,
+                gemstoneOverridePricePerPiece: product.gemstoneOverridePricePerPiece,
+                gemstoneOverridePieces: product.gemstoneOverridePieces,
+                gemstoneOverrideColor: product.gemstoneOverrideColor,
                 gemstones: gemstonesToSend,
             });
 
@@ -506,6 +526,11 @@ export default function Products() {
                 enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
                 discount: editDiscount ? parseFloat(editDiscount) : 0,
                 discountType: editDiscountType,
+                gemstoneOverridePricePerPiece: editGemstoneOverridePricePerPiece ? parseFloat(editGemstoneOverridePricePerPiece) : null,
+                gemstoneOverridePieces: editGemstoneOverridePieces ? parseInt(editGemstoneOverridePieces) : null,
+                gemstoneOverrideColor: editGemstoneOverrideColor || null,
+                grossGoldWeight: editGrossGoldWeight ? parseFloat(editGrossGoldWeight) : null,
+                autoGrossGoldWeight: editAutoGrossGoldWeight,
                 gemstones: productGemstones,
             });
 
@@ -532,6 +557,10 @@ export default function Products() {
         setGemstoneModalNaturalOrLabgrown('');
         setGemstoneModalDiscountType('');
         setGemstoneModalDiscountValue('');
+        setGemstoneModalIsCustom(false);
+        setGemstoneModalPricePerPiece('');
+        setGemstoneModalPricePerCarat('');
+        setGemstoneModalPricingType(null);
         setShowGemstoneModal(true);
     };
 
@@ -550,11 +579,41 @@ export default function Products() {
         setGemstoneModalNaturalOrLabgrown((gem as any).naturalOrLabgrown || '');
         setGemstoneModalDiscountType(gem.discountType || '');
         setGemstoneModalDiscountValue(gem.discountValue?.toString() || '');
+        setGemstoneModalIsCustom(gem.isCustom || false);
+        setGemstoneModalPricePerPiece(gem.pricePerPiece?.toString() || '');
+        setGemstoneModalPricePerCarat(gem.pricePerCarat?.toString() || '');
+
+        // Determine pricing type for custom gems
+        if (gem.isCustom) {
+            if (gem.pricePerCarat) {
+                setGemstoneModalPricingType('perCarat');
+            } else {
+                setGemstoneModalPricingType('perPiece');
+            }
+        }
+
         setShowGemstoneModal(true);
     };
 
     const handleSaveGemstone = () => {
         if (!gemstoneModalType) return;
+
+        // Validation for custom gemstones
+        if (gemstoneModalIsCustom) {
+            if (gemstoneModalPricingType === 'perCarat') {
+                const price = parseFloat(gemstoneModalPricePerCarat);
+                const weight = parseFloat(gemstoneModalWeight);
+                if (isNaN(price) || price <= 0 || isNaN(weight) || weight <= 0) {
+                    return;
+                }
+            } else {
+                const price = parseFloat(gemstoneModalPricePerPiece);
+                const pieces = parseInt(gemstoneModalPieces);
+                if (isNaN(price) || price <= 0 || isNaN(pieces) || pieces <= 0) {
+                    return;
+                }
+            }
+        }
 
         const newGemstone: ProductGemstone = {
             gemstoneType: gemstoneModalType,
@@ -569,6 +628,9 @@ export default function Products() {
             naturalOrLabgrown: gemstoneModalNaturalOrLabgrown || undefined,
             discountType: (gemstoneModalDiscountType as any) || undefined,
             discountValue: gemstoneModalDiscountValue ? parseFloat(gemstoneModalDiscountValue) : undefined,
+            isCustom: gemstoneModalIsCustom,
+            pricePerPiece: gemstoneModalIsCustom && gemstoneModalPricingType !== 'perCarat' ? parseFloat(gemstoneModalPricePerPiece) : undefined,
+            pricePerCarat: gemstoneModalIsCustom && gemstoneModalPricingType === 'perCarat' ? parseFloat(gemstoneModalPricePerCarat) : undefined,
         };
 
         if (editingGemstoneIndex !== null) {
@@ -629,6 +691,10 @@ export default function Products() {
         setEditIsManualGemstonePrice(product.isManualGemstonePrice || false);
         setEditManualGemstoneWeight(product.manualGemstoneWeight?.toString() || '');
         setEditManualGemstonePrice(product.manualGemstonePrice?.toString() || '');
+
+
+        setEditGrossGoldWeight(product.grossGoldWeight?.toString() || '');
+        setEditAutoGrossGoldWeight(product.autoGrossGoldWeight || false);
 
         setEditMetalDiscountType(product.metalDiscountType || 'none');
         setEditMetalDiscountValue(product.metalDiscountValue?.toString() || '');
@@ -1158,14 +1224,46 @@ export default function Products() {
                             SKU: {editingProduct?.sku || 'N/A'}
                         </Text>
 
-                        <TextField
-                            label="Weight (grams)"
-                            type="number"
-                            value={editWeight}
-                            onChange={setEditWeight}
-                            placeholder="Enter weight in grams"
-                            autoComplete="off"
-                        />
+                        <Card>
+                            <BlockStack gap="400">
+                                <Text as="h3" variant="headingMd">Weight Configuration</Text>
+                                <InlineStack align="space-between">
+                                    <Text as="p">Auto Calculate Gross Weight</Text>
+                                    <Button
+                                        pressed={editAutoGrossGoldWeight}
+                                        onClick={() => setEditAutoGrossGoldWeight(!editAutoGrossGoldWeight)}
+                                        size="slim"
+                                    >
+                                        {editAutoGrossGoldWeight ? 'Enabled' : 'Disabled'}
+                                    </Button>
+                                </InlineStack>
+
+                                <TextField
+                                    label="Net Gold Weight (grams)"
+                                    type="number"
+                                    value={editWeight}
+                                    onChange={setEditWeight}
+                                    placeholder="Enter net weight"
+                                    autoComplete="off"
+                                />
+
+                                <TextField
+                                    label="Gross Gold Weight (grams)"
+                                    type="number"
+                                    value={editAutoGrossGoldWeight ?
+                                        ((parseFloat(editWeight) || 0) +
+                                            (productGemstones.reduce((sum, g) => sum + (g.gemstoneWeight || 0), 0)) +
+                                            (parseFloat(editEnamelWeightGrams) || 0)).toFixed(3)
+                                        : editGrossGoldWeight
+                                    }
+                                    onChange={setEditGrossGoldWeight}
+                                    disabled={editAutoGrossGoldWeight}
+                                    placeholder="Enter gross weight"
+                                    autoComplete="off"
+                                    helpText={editAutoGrossGoldWeight ? "Calculated: Net + Stones + Enamel" : "Manual override for total weight"}
+                                />
+                            </BlockStack>
+                        </Card>
 
                         <Select
                             label="Metal Type"
@@ -1277,15 +1375,18 @@ export default function Products() {
                                                 <InlineStack align="space-between" blockAlign="center">
                                                     <BlockStack gap="100">
                                                         <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                                            {gem.isCustom && <Badge tone="attention">CUSTOM</Badge>}
                                                             {gem.gemstoneType}
                                                             {gem.gemstoneClarity && ` (${gem.gemstoneClarity})`}
                                                             {gem.gemstoneColor && ` ${gem.gemstoneColor}`}
                                                             {gem.gemstoneCut && ` ${gem.gemstoneCut}`}
                                                         </Text>
                                                         <Text as="p" variant="bodySm" tone="subdued">
-                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}ct`}
-                                                            {gem.gemstoneCaratRange && ` • Range: ${gem.gemstoneCaratRange}`}
-                                                            {gem.discountType && ` • Discount: ${gem.discountValue}${gem.discountType === 'percent' ? '%' : '₹'}`}
+                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}ct `}
+                                                            {gem.gemstonePieces && `${gem.gemstonePieces}pcs `}
+                                                            {(gem.isCustom && gem.pricePerPiece) && `(₹${gem.pricePerPiece}/pc) `}
+                                                            {gem.gemstoneCaratRange && `• Range: ${gem.gemstoneCaratRange} `}
+                                                            {gem.discountType && `• Discount: ${gem.discountValue}${gem.discountType === 'percent' ? '%' : '₹'}`}
                                                         </Text>
                                                     </BlockStack>
                                                     <InlineStack gap="200">
@@ -1308,6 +1409,7 @@ export default function Products() {
                                 )}
                             </BlockStack>
                         </Card>
+
 
 
                         <Card>
@@ -1551,17 +1653,26 @@ export default function Products() {
                                                                 return (
                                                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f2f3' }}>
                                                                         <td style={{ padding: '8px 16px' }}>
-                                                                            {gem.type.charAt(0).toUpperCase() + gem.type.slice(1)} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
-                                                                            {gem.hasDiscount && <Badge tone="critical">Sale</Badge>}
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                                <span style={{ fontWeight: 500 }}>
+                                                                                    {(gem.type || '').replace(/_/g, ' ')} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
+                                                                                </span>
+                                                                                {gem.hasDiscount && <Badge tone="critical">Sale</Badge>}
+                                                                                {gem.isCustom && <Badge tone="info" size="small">CUSTOM</Badge>}
+                                                                            </div>
                                                                             {gem.rateNotSet ? (
                                                                                 <div style={{ color: '#d72c0d', fontSize: '12px', fontWeight: 600 }}>
                                                                                     ⚠️ Rate not set - Add in Rates page
                                                                                 </div>
-                                                                            ) : gem.weight && (
+                                                                            ) : gem.weight ? (
                                                                                 <div style={{ color: '#6d7175', fontSize: '12px' }}>
                                                                                     {gem.weight}{weightUnit} × ₹{((gem.cost / 100 / gem.weight) || 0).toLocaleString()}/{rateUnit}
                                                                                 </div>
-                                                                            )}
+                                                                            ) : gem.pieces ? (
+                                                                                <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                    {gem.pieces} pcs × ₹{((gem.cost / 100 / gem.pieces) || 0).toLocaleString()}/pc
+                                                                                </div>
+                                                                            ) : null}
                                                                         </td>
                                                                         <td style={{ padding: '8px 16px', textAlign: 'right' }}>
                                                                             {gem.rateNotSet ? (
@@ -1604,7 +1715,12 @@ export default function Products() {
                                                                                 )}
                                                                                 {priceBreakdown.gemstone_details?.type === 'manual' && (
                                                                                     <div style={{ color: '#6d7175', fontSize: '12px' }}>
-                                                                                        Manual Price
+                                                                                        Gemstone Pricing Source: Manual (Per Piece)
+                                                                                    </div>
+                                                                                )}
+                                                                                {priceBreakdown.gemstone_details?.type !== 'manual' && (
+                                                                                    <div style={{ color: '#6d7175', fontSize: '12px' }}>
+                                                                                        Gemstone Pricing Source: Rate-Based
                                                                                     </div>
                                                                                 )}
                                                                             </>
@@ -1757,12 +1873,42 @@ export default function Products() {
             >
                 <Modal.Section>
                     <BlockStack gap="400">
-                        <Select
-                            label="Gemstone Type"
-                            options={getUniqueGemstoneTypes()}
-                            value={gemstoneModalType}
-                            onChange={setGemstoneModalType}
-                        />
+                        <div style={{ padding: '8px 0' }}>
+                            <Checkbox
+                                label="Custom Gemstone (Manual Price)"
+                                checked={gemstoneModalIsCustom}
+                                onChange={(value: boolean) => setGemstoneModalIsCustom(value)}
+                            />
+                        </div>
+
+                        {gemstoneModalIsCustom ? (
+                            <BlockStack gap="400">
+                                <TextField
+                                    label="Custom Name"
+                                    value={gemstoneModalType}
+                                    onChange={setGemstoneModalType}
+                                    placeholder="e.g. Blue Accent Stone"
+                                    autoComplete="off"
+                                />
+                                <Select
+                                    label="Pricing Method"
+                                    options={[
+                                        { label: 'Per Carat (Weight Based)', value: 'perCarat' },
+                                        { label: 'Per Piece (Quantity Based)', value: 'perPiece' },
+                                    ]}
+                                    value={gemstoneModalPricingType || 'perPiece'} // Default to perPiece if null
+                                    onChange={(val) => setGemstoneModalPricingType(val as any)}
+                                />
+                            </BlockStack>
+                        ) : (
+                            <Select
+                                label="Gemstone Type"
+                                options={getUniqueGemstoneTypes()}
+                                value={gemstoneModalType}
+                                onChange={setGemstoneModalType}
+                                placeholder="Select gemstone type"
+                            />
+                        )}
 
                         <Select
                             label="Stone Type (Optional)"
@@ -1810,12 +1956,12 @@ export default function Products() {
                             disabled={!gemstoneModalType}
                         />
 
-                        <Select
-                            label="Color (Optional)"
-                            options={getAvailableColors()}
+                        <TextField
+                            label="Color (Optional/Description)"
                             value={gemstoneModalColor}
                             onChange={setGemstoneModalColor}
-                            disabled={!gemstoneModalType}
+                            placeholder="e.g. D-E, Intense Blue, or Mix"
+                            autoComplete="off"
                         />
 
                         <Select
@@ -1836,7 +1982,33 @@ export default function Products() {
                         />
 
 
-                        {gemstoneModalPricingType === 'perCarat' && (
+                        {gemstoneModalIsCustom && gemstoneModalPricingType !== 'perCarat' && (
+                            <TextField
+                                label="Price Per Piece"
+                                type="number"
+                                value={gemstoneModalPricePerPiece}
+                                onChange={setGemstoneModalPricePerPiece}
+                                placeholder="Enter manual price per piece"
+                                autoComplete="off"
+                                prefix="₹"
+                                helpText="Total = Price Per Piece × Pieces"
+                            />
+                        )}
+
+                        {gemstoneModalIsCustom && gemstoneModalPricingType === 'perCarat' && (
+                            <TextField
+                                label="Price Per Carat"
+                                type="number"
+                                value={gemstoneModalPricePerCarat}
+                                onChange={setGemstoneModalPricePerCarat}
+                                placeholder="Enter manual price per carat"
+                                autoComplete="off"
+                                prefix="₹"
+                                helpText="Total = Price Per Carat × Weight"
+                            />
+                        )}
+
+                        {(gemstoneModalPricingType === 'perCarat' || (gemstoneModalIsCustom && gemstoneModalPricingType === 'perCarat')) && (
                             <TextField
                                 label="Weight (carats)"
                                 type="number"
@@ -1848,19 +2020,19 @@ export default function Products() {
                             />
                         )}
 
-                        {gemstoneModalPricingType === 'perPiece' && (
+                        {(gemstoneModalPricingType === 'perPiece' || gemstoneModalIsCustom) && (
                             <TextField
-                                label="Number of Pieces"
+                                label={gemstoneModalIsCustom ? "Number of Pieces (Required)" : "Number of Pieces"}
                                 type="number"
                                 value={gemstoneModalPieces}
                                 onChange={setGemstoneModalPieces}
                                 placeholder="Enter number of pieces"
                                 autoComplete="off"
-                                helpText="Price will be calculated as: Rate × Number of Pieces"
+                                helpText={gemstoneModalIsCustom ? "Total = Price Per Piece × Pieces" : "Price will be calculated as: Rate × Number of Pieces"}
                             />
                         )}
 
-                        {!gemstoneModalPricingType && gemstoneModalType && (
+                        {!gemstoneModalPricingType && gemstoneModalType && !gemstoneModalIsCustom && (
                             <div style={{ padding: '12px', background: '#fef3cd', border: '1px solid #f0e5a1', borderRadius: '4px' }}>
                                 <Text as="p" variant="bodyMd" tone="caution">
                                     ⚠️ No rate found for this gemstone combination. Please add a rate in the Rates page first.

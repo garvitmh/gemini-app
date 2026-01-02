@@ -82,7 +82,7 @@
           {% for gem in breakdown.gemstone_details.gemstones %}
             <tr style="border-bottom: 1px solid #f1f2f3;">
               <td style="padding: 10px 16px; color: #374151;">
-                {{ gem.type }}
+                {{ gem.type | replace: '_', ' ' }}
                 {% if gem.clarity %}({{ gem.clarity }}){% endif %}
                 {% if gem.color %}{{ gem.color }}{% endif %}
                 {% if gem.cut %}{{ gem.cut }}{% endif %}
@@ -92,21 +92,23 @@
                 {% if gem.rateNotSet %}
                   <div style="font-size: 12px; color: #d93025; font-weight: 600;">⚠️ Rate not set</div>
                 {% elsif gem.weight %}
-                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem.cost | divided_by: gem.weight | divided_by: 100 | round }}/ct</div>
+                  {% assign gem_rate = gem.cost | divided_by: gem.weight | divided_by: 100 | round %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem_rate }}/ct</div>
                 {% elsif gem.pieces %}
-                  <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem.cost | divided_by: gem.pieces | divided_by: 100 | round }}/pc</div>
+                  {% assign gem_rate = gem.cost | divided_by: gem.pieces | divided_by: 100 | round %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem_rate }}/pc</div>
                 {% endif %}
               </td>
               <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
                 {% if gem.rateNotSet %}
-                  <span style="color: #d93025;">₹0.00</span>
+                  <span style="color: #d93025;">Rs. 0.00</span>
                 {% else %}
                   {% if gem.hasDiscount %}
                     <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                      {{ gem.cost | times: 0.01 | money }}
+                      Rs. {{ gem.cost | times: 0.01 | round: 2 }}
                     </div>
                   {% endif %}
-                  {{ gem.finalCost | times: 0.01 | money }}
+                  Rs. {{ gem.finalCost | times: 0.01 | round: 2 }}
                 {% endif %}
               </td>
             </tr>
@@ -117,7 +119,7 @@
             <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
               <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
               <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
-                {{ breakdown.gemstone_price | times: 0.01 | money }}
+                Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
               </td>
             </tr>
           {% endif %}
@@ -126,7 +128,7 @@
         {% elsif breakdown.gemstone_price > 0 or breakdown.gemstone_price_original > 0 %}
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #374151;">
-              {{ breakdown.gemstone_name | default: 'Gemstone' }}
+              {{ breakdown.gemstone_name | default: 'Gemstone' | replace: '_', ' ' }}
               {% if breakdown.has_gemstone_discount %}
                 <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
               {% endif %}
@@ -145,10 +147,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_gemstone_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  {{ breakdown.gemstone_price_original | times: 0.01 | money }}
+                  Rs. {{ breakdown.gemstone_price_original | times: 0.01 | round: 2 }}
                 </div>
               {% endif %}
-              {{ breakdown.gemstone_price | times: 0.01 | money }}
+              Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -157,7 +159,7 @@
         {% if breakdown.enamel_price > 0 or breakdown.enamel_price_original > 0 %}
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #374151;">
-              {{ breakdown.enamel_name | default: 'Enamel' }}
+              {{ breakdown.enamel_name | default: 'Enamel' | replace: '_', ' ' }}
               {% if breakdown.has_enamel_discount %}
                 <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
               {% endif %}
@@ -170,10 +172,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_enamel_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  {{ breakdown.enamel_price_original | times: 0.01 | money }}
+                  Rs. {{ breakdown.enamel_price_original | times: 0.01 | round: 2 }}
                 </div>
               {% endif %}
-              {{ breakdown.enamel_price | times: 0.01 | money }}
+              Rs. {{ breakdown.enamel_price | times: 0.01 | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -182,7 +184,7 @@
         <tr style="background-color: #fafbfb; border-top: 1px solid #e1e3e5;">
           <td style="padding: 8px 16px; font-weight: 600; color: #374151;">Subtotal</td>
           <td style="padding: 8px 16px; text-align: right; font-weight: 600; color: #374151;">
-            {{ breakdown.subtotal | times: 0.01 | money }}
+            Rs. {{ breakdown.subtotal | times: 0.01 | round: 2 }}
           </td>
         </tr>
         
@@ -191,7 +193,7 @@
           <td style="padding: 10px 16px; color: #374151;">GST ({{ breakdown.gst_pct }}%)</td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% assign gst_value = breakdown.gst_amount | default: breakdown.gst | default: 0 %}
-            {{ gst_value | times: 0.01 | money }}
+            Rs. {{ gst_value | times: 0.01 | round: 2 }}
           </td>
         </tr>
         

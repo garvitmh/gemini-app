@@ -1,3 +1,29 @@
+# System Checkpoint: custom-gemstone-fix-stable
+
+**Date:** 2026-01-02
+**Commit Label:** `checkpoint/custom-gemstone-fix-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after fixing the "Rate not set" error for Custom Gemstones. The system now supports both Weight-based (Price/Carat) and Piece-based (Price/Piece) pricing for custom gems in both backend logic and frontend UI.
+
+### Verified Stable Features
+1.  **Custom Gemstone Logic**
+    - [x] Backend `server-simple.ts` supports `pricePerCarat` calculation.
+    - [x] Backend handles fallback to `pricePerPiece` correctly.
+    - [x] Frontend `Products.tsx` UI adds "Pricing Method" toggle.
+    - [x] Frontend validates and sends correct price/weight data.
+2.  **Regression Checks**
+    - [x] Standard gemstone pricing remains unaffected.
+    - [x] Existing products with piece-based custom gems load correctly.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/custom-gemstone-fix-stable`.
+2.  **Revert**: `git reset --hard checkpoint/custom-gemstone-fix-stable`
+3.  **Verify**: Open "Add Gemstone", check "Custom Gemstone", and ensure "Pricing Method" toggle exists.
+
+---
+
 # System Checkpoint: pre-massive-audit-baseline
 
 **Date:** 2026-01-02

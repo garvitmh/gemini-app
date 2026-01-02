@@ -27,7 +27,21 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Helper to calculate price and breakdown
 const calculateProductPrice = async (product: any, ratePerGram: number, stoneRate: any | null, settings: any, enamelRate: any | null = null) => {
     console.log('✨ calculateProductPrice - product.gemstones:', product.gemstones);
-    const weight = product.weightGrams || 0;
+    // NEW: Auto Gross Weight Calculation
+    let resolvedWeight = product.weightGrams || 0;
+    if (product.autoGrossGoldWeight) {
+        let stonesWeight = 0;
+        if (product.gemstones && product.gemstones.length > 0) {
+            stonesWeight = product.gemstones.reduce((sum: number, g: any) => sum + (g.gemstoneWeight || 0), 0);
+        } else if (product.stoneWeightCarat) {
+            stonesWeight = product.stoneWeightCarat;
+        }
+        resolvedWeight = (product.weightGrams || 0) + stonesWeight + (product.enamelWeightGrams || 0);
+    } else if (product.grossGoldWeight != null && product.grossGoldWeight > 0) {
+        resolvedWeight = product.grossGoldWeight;
+    }
+
+    const weight = resolvedWeight || 0;
     const metalValueRaw = ratePerGram * weight;
 
     // Defaults
@@ -92,13 +106,25 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
                     shopId: product.shopId,
                     stoneType: gemstone.gemstoneType,
                     cut: gemstone.gemstoneCut || null,
-                    color: gemstone.gemstoneColor || null,
+                    // COLOR REMOVED PER GUARDRAIL 2: Never used in rate lookup
                     clarity: gemstone.gemstoneClarity || null,
                 },
             });
 
             let rateNotSet = false;
-            if (gemStoneRate) {
+            if (gemstone.isCustom) {
+                // GUARDRAIL 1 & 3: Mandatory Validation & No Implicit Defaults
+                if (
+                    gemstone.pricePerPiece == null ||
+                    gemstone.pricePerPiece <= 0 ||
+                    gemstone.gemstonePieces == null ||
+                    gemstone.gemstonePieces <= 0
+                ) {
+                    // SAFETY: Ignore invalid custom gemstone entirely
+                    continue;
+                }
+                gemCost = gemstone.pricePerPiece * gemstone.gemstonePieces;
+            } else if (gemStoneRate) {
                 if (gemStoneRate.ratePerCarat && gemstone.gemstoneWeight) {
                     gemCost = gemStoneRate.ratePerCarat * gemstone.gemstoneWeight;
                 } else if (gemStoneRate.ratePerPiece && gemstone.gemstonePieces) {
@@ -298,13 +324,24 @@ const generateBreakdownHtml = (breakdown: any) => {
     // Handle multiple gemstones - only show if there are actual gemstones
     if (breakdown.gemstone_details && breakdown.gemstone_details.type === 'multiple' && breakdown.gemstone_details.gemstones && breakdown.gemstone_details.gemstones.length > 0) {
         for (const gem of breakdown.gemstone_details.gemstones) {
-            const gemName = `${gem.type}${gem.clarity ? ` (${gem.clarity})` : ''}${gem.color ? ` ${gem.color}` : ''}${gem.cut ? ` ${gem.cut}` : ''}`;
+            const displayType = (gem.type || '').replace(/_/g, ' ');
+            const gemName = `${displayType}${gem.clarity ? ` (${gem.clarity})` : ''}${gem.color ? ` ${gem.color}` : ''}${gem.cut ? ` ${gem.cut}` : ''}`;
+
+            let gemSubtext = '';
+            if (gem.weight) {
+                const rate = Math.round((gem.cost / 100 / gem.weight) || 0);
+                gemSubtext = `${gem.weight}ct × ₹${rate.toLocaleString()}/ct`;
+            } else if (gem.pieces) {
+                const rate = Math.round((gem.cost / 100 / gem.pieces) || 0);
+                gemSubtext = `${gem.pieces} pcs × ₹${rate.toLocaleString()}/pc`;
+            }
+
             html += `
                 <tr style="border-bottom: 1px solid #f1f2f3;">
                     <td style="padding: 10px 16px; color: #374151;">
                         ${gemName}
                         ${gem.hasDiscount ? `<span style="margin-left:8px; font-size:12px; color:#d93025; background:#fee2e2; padding:2px 6px; border-radius:4px;">Sale</span>` : ''}
-                        ${gem.weight ? `<div style="font-size: 12px; color: #6b7280;">${gem.weight}ct</div>` : ''}
+                        ${gemSubtext ? `<div style="font-size: 12px; color: #6b7280;">${gemSubtext}</div>` : ''}
                     </td>
                     <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
                         ${gem.hasDiscount ? `<div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">₹${fmt(gem.cost)}</div>` : ''}
@@ -1375,7 +1412,7 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                                             gemstoneWeight: gem.gemstoneWeight ? parseFloat(gem.gemstoneWeight) : null,
                                             gemstonePieces: gem.gemstonePieces ? parseInt(gem.gemstonePieces) : null,
                                             discountType: gem.discountType || null,
-                                            discountValue: gem.discountValue ? parseFloat(gem.discountValue) : null,
+                                            discountValue: gem.discountValue ? parseFloat(gem.discountValue) : null
                                         }
                                     });
                                 }
@@ -1467,7 +1504,9 @@ app.put('/api/products/:id', async (req, res) => {
             weightGrams, metal, karat,
             gemstoneType, gemstoneCut, gemstoneColor,
             gemstoneClarity, gemstoneCaratRange,
-            stonePieces, stoneWeightCarat
+            stonePieces, stoneWeightCarat,
+            gemstoneOverridePricePerPiece, gemstoneOverridePieces, gemstoneOverrideColor,
+            grossGoldWeight, autoGrossGoldWeight
         } = req.body;
 
         const shop = await prisma.shop.findFirst({ include: { settings: true } });
@@ -1499,7 +1538,12 @@ app.put('/api/products/:id', async (req, res) => {
                 makingDiscountValue: req.body.makingDiscountValue !== undefined ? parseFloat(req.body.makingDiscountValue) : null,
                 gemstoneDiscountType: req.body.gemstoneDiscountType || null,
                 gemstoneDiscountValue: req.body.gemstoneDiscountValue !== undefined ? parseFloat(req.body.gemstoneDiscountValue) : null,
-            },
+                gemstoneOverridePricePerPiece: req.body.gemstoneOverridePricePerPiece !== undefined ? parseFloat(req.body.gemstoneOverridePricePerPiece) : null,
+                gemstoneOverridePieces: req.body.gemstoneOverridePieces !== undefined ? parseInt(req.body.gemstoneOverridePieces) : null,
+                gemstoneOverrideColor: req.body.gemstoneOverrideColor || null,
+                grossGoldWeight: req.body.grossGoldWeight !== undefined ? parseFloat(req.body.grossGoldWeight) : null,
+                autoGrossGoldWeight: req.body.autoGrossGoldWeight === true || req.body.autoGrossGoldWeight === 'true',
+            } as any,
         });
 
         // Handle gemstones separately if provided
@@ -1539,6 +1583,8 @@ app.put('/api/products/:id', async (req, res) => {
                         gemstoneCaratRange: gem.gemstoneCaratRange || null,
                         gemstoneWeight: gem.gemstoneWeight || null,
                         gemstonePieces: gem.gemstonePieces || null,
+                        isCustom: gem.isCustom === true || gem.isCustom === 'true',
+                        pricePerPiece: gem.pricePerPiece !== undefined ? parseFloat(gem.pricePerPiece) : null,
                         discountType: gem.discountType || null,
                         discountValue: gem.discountValue || null,
                     })),

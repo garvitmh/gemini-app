@@ -79,7 +79,7 @@ export class PricingService {
         const query: any = { shopId, stoneType };
 
         if (options?.cut) query.cut = options.cut;
-        if (options?.color) query.color = options.color;
+        // COLOR REMOVED PER GUARDRAIL 2: Never used in rate lookup
         if (options?.clarity) query.clarity = options.clarity;
         if (options?.caratRange) query.caratRange = options.caratRange;
 
@@ -154,6 +154,13 @@ export class PricingService {
             gstPct?: number;
             discount?: number;
             discountType?: string;
+            gemstoneOverridePricePerPiece?: number;
+            gemstoneOverridePieces?: number;
+            gemstoneOverrideColor?: string;
+            grossGoldWeight?: number;
+            autoGrossGoldWeight?: boolean;
+            gemstones?: any[]; // For auto calculation
+            enamelWeightGrams?: number; // For auto calculation
         }
 
     ): Promise<number> {
@@ -162,30 +169,69 @@ export class PricingService {
             where: { shopId },
         });
 
+        // Resolve Gross Gold Weight
+        let resolvedWeight = product.weightGrams || 0;
+        if (product.autoGrossGoldWeight) {
+            let stonesWeight = 0;
+            if (product.gemstones && product.gemstones.length > 0) {
+                stonesWeight = product.gemstones.reduce((sum, g) => sum + (g.gemstoneWeight || 0), 0);
+            } else if (product.stoneWeightCarat) {
+                stonesWeight = product.stoneWeightCarat;
+            }
+            resolvedWeight = (product.weightGrams || 0) + stonesWeight + (product.enamelWeightGrams || 0);
+        } else if (product.grossGoldWeight != null && product.grossGoldWeight > 0) {
+            resolvedWeight = product.grossGoldWeight;
+        }
+
         // Get metal rate
         let metalRate = 0;
-        if (product.metal && product.weightGrams) {
+        if (product.metal && resolvedWeight > 0) {
             metalRate = await this.getMetalRate(shopId, product.metal, product.karat);
         }
 
         // Get stone rate
-        let stoneRate = 0;
-        if (product.stoneType && (product.stoneWeightCarat || product.stonePieces)) {
+        let stoneValue = 0;
+
+        // 1. Multiple Gemstones (New Approach)
+        if (product.gemstones && product.gemstones.length > 0) {
+            for (const gemstone of product.gemstones) {
+                let gemCost = 0;
+                if (gemstone.isCustom) {
+                    // GUARDRAIL 1 & 3: Mandatory Validation & No Implicit Defaults
+                    if (
+                        gemstone.pricePerPiece == null ||
+                        gemstone.pricePerPiece <= 0 ||
+                        gemstone.gemstonePieces == null ||
+                        gemstone.gemstonePieces <= 0
+                    ) {
+                        // SAFETY: Ignore invalid custom gemstone entirely
+                        continue;
+                    }
+                    gemCost = gemstone.pricePerPiece * gemstone.gemstonePieces;
+                } else {
+                    const rate = await this.getStoneRate(shopId, gemstone.gemstoneType);
+                    const stoneRate = rate.perCarat || rate.perPiece || 0;
+                    gemCost = stoneRate * (gemstone.gemstoneWeight || gemstone.gemstonePieces || 0);
+                }
+                stoneValue += gemCost;
+            }
+        }
+        // 3. Single Legacy Gemstone
+        else if (product.stoneType && (product.stoneWeightCarat || product.stonePieces)) {
             const rate = await this.getStoneRate(shopId, product.stoneType);
-            stoneRate = rate.perCarat || rate.perPiece || 0;
+            const stoneRate = rate.perCarat || rate.perPiece || 0;
+            stoneValue = stoneRate * (product.stoneWeightCarat || product.stonePieces || 0);
         }
 
         // Prepare variables
         const variables: PricingVariables = {
             metal_rate: metalRate,
             karat: product.karat,
-            wt_g: product.weightGrams || 0,
+            wt_g: resolvedWeight,
             making_flat: product.makingChargeFlat ?? 0,
             making_pct: product.makingChargePct ?? 0,
             wastage_pct: product.wastagePct ?? settings?.defaultWastagePct ?? 0,
             gst_pct: product.gstPct ?? settings?.defaultGstPct ?? 3,
-            stone_rate: stoneRate,
-            stone_wt: product.stoneWeightCarat,
             stone_pieces: product.stonePieces,
             discount: product.discount ?? settings?.defaultDiscount ?? 0,
         };
@@ -204,7 +250,6 @@ export class PricingService {
 
         const metalValue = variables.metal_rate * variables.wt_g * (1 + variables.wastage_pct! / 100);
         const makingCharge = variables.making_flat! + (metalValue * variables.making_pct! / 100);
-        const stoneValue = variables.stone_rate! * (variables.stone_wt || variables.stone_pieces || 0);
         const subtotal = metalValue + makingCharge + stoneValue;
         const gstAmount = subtotal * (variables.gst_pct! / 100);
         const subtotalPlusGst = subtotal + gstAmount;
@@ -273,6 +318,13 @@ export class PricingService {
                         gstPct: product.gstPct || undefined,
                         discount: (product as any).discount || undefined,
                         discountType: (product as any).discountType || undefined,
+                        gemstoneOverridePricePerPiece: product.gemstoneOverridePricePerPiece || undefined,
+                        gemstoneOverridePieces: product.gemstoneOverridePieces || undefined,
+                        gemstoneOverrideColor: product.gemstoneOverrideColor || undefined,
+                        grossGoldWeight: (product as any).grossGoldWeight || undefined,
+                        autoGrossGoldWeight: (product as any).autoGrossGoldWeight || false,
+                        gemstones: (product as any).gemstones || undefined,
+                        enamelWeightGrams: (product as any).enamelWeightGrams || undefined,
                     };
 
 

@@ -79,11 +79,58 @@
           </td>
         </tr>
         
-        {% comment %} Gemstone Row (if exists) {% endcomment %}
-        {% if breakdown.gemstone_price and breakdown.gemstone_price > 0 %}
+        {% comment %} Multiple Gemstones Support {% endcomment %}
+        {% if breakdown.gemstone_details.type == 'multiple' and breakdown.gemstone_details.gemstones %}
+          {% for gem in breakdown.gemstone_details.gemstones %}
+            <tr style="border-bottom: 1px solid #f1f2f3;">
+              <td style="padding: 10px 16px; color: #374151;">
+                {{ gem.type | replace: '_', ' ' }}
+                {% if gem.clarity %}({{ gem.clarity }}){% endif %}
+                {% if gem.color %}{{ gem.color }}{% endif %}
+                {% if gem.cut %}{{ gem.cut }}{% endif %}
+                {% if gem.hasDiscount %}
+                  <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+                {% endif %}
+                {% if gem.rateNotSet %}
+                  <div style="font-size: 12px; color: #d93025; font-weight: 600;">⚠️ Rate not set</div>
+                {% elsif gem.weight %}
+                  {% assign gem_rate = gem.cost | divided_by: gem.weight | divided_by: 100 | round %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem_rate }}/ct</div>
+                {% elsif gem.pieces %}
+                  {% assign gem_rate = gem.cost | divided_by: gem.pieces | divided_by: 100 | round %}
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem_rate }}/pc</div>
+                {% endif %}
+              </td>
+              <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+                {% if gem.rateNotSet %}
+                  <span style="color: #d93025;">Rs. 0.00</span>
+                {% else %}
+                  {% if gem.hasDiscount %}
+                    <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
+                      Rs. {{ gem.cost | times: 0.01 | round: 2 }}
+                    </div>
+                  {% endif %}
+                  Rs. {{ gem.finalCost | times: 0.01 | round: 2 }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          
+          {% comment %} Total Gemstones Row (if multiple) {% endcomment %}
+          {% if breakdown.gemstone_details.gemstones.size > 1 %}
+            <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
+              <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
+              <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
+                Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
+              </td>
+            </tr>
+          {% endif %}
+        
+        {% comment %} Single Gemstone (Fallback) {% endcomment %}
+        {% elsif breakdown.gemstone_price and breakdown.gemstone_price > 0 %}
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #374151;">
-              {{ breakdown.gemstone_name | default: 'Gemstone' }}
+              {{ breakdown.gemstone_name | default: 'Gemstone' | replace: '_', ' ' }}
               {% if breakdown.has_gemstone_discount %}
                 <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
               {% endif %}
@@ -103,7 +150,7 @@
         {% if breakdown.enamel_price and breakdown.enamel_price > 0 %}
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #374151;">
-              {{ breakdown.enamel_name | default: 'Enamel' }}
+              {{ breakdown.enamel_name | default: 'Enamel' | replace: '_', ' ' }}
               {% if breakdown.has_enamel_discount %}
                 <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
               {% endif %}
@@ -120,11 +167,11 @@
         {% endif %}
         
         {% comment %} Subtotal Row {% endcomment %}
-        <tr style="border-bottom: 1px solid #f1f2f3;">
-          <td style="padding: 10px 16px; color: #374151; font-weight: 500;">
+        <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
+          <td style="padding: 10px 16px; color: #374151; font-weight: 600;">
             Subtotal
           </td>
-          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+          <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
             Rs. {{ breakdown.subtotal | times: 0.01 | round: 2 }}
           </td>
         </tr>
