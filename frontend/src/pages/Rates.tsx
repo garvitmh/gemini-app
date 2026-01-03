@@ -14,6 +14,7 @@ import {
     RadioButton,
 } from '@shopify/polaris';
 import api from '../utils/api';
+import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
 
 interface MetalRate {
     id: string;
@@ -275,7 +276,7 @@ export default function Rates() {
     };
 
     const formatStoneRateDisplay = (rate: StoneRate) => {
-        const parts = [rate.stoneType.toUpperCase()];
+        const parts = [getGemstoneDisplayName(rate.stoneType)];
         if (rate.cut) parts.push(rate.cut);
         if (rate.color) parts.push(rate.color);
         if (rate.clarity) parts.push(rate.clarity);

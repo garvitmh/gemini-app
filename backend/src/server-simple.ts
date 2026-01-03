@@ -9,6 +9,7 @@ import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import { BulkPriceUpdateService } from './services/bulkPriceUpdate.service';
+import { getGemstoneDisplayName } from './utils/gemstoneDisplay';
 
 const PORT = process.env.PORT || 3000;
 const prisma = new PrismaClient();
@@ -176,7 +177,7 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
 
             gemstoneCost += finalGemCost;
             gemstonesArray.push({
-                type: gemstone.gemstoneType,
+                type: getGemstoneDisplayName(gemstone.gemstoneType),
                 cut: gemstone.gemstoneCut,
                 color: gemstone.gemstoneColor,
                 clarity: gemstone.gemstoneClarity,
@@ -303,7 +304,7 @@ const calculateProductPrice = async (product: any, ratePerGram: number, stoneRat
             making_charge_type: makingChargeType,
             making_charge_rate: makingChargeValue,
 
-            gemstone_name: stoneDetails ? (stoneRate?.stoneType || product.gemstoneType) : 'Gemstone',
+            gemstone_name: stoneDetails ? getGemstoneDisplayName(stoneRate?.stoneType || product.gemstoneType) : 'Gemstone',
             gemstone_details: stoneDetails,
 
             enamel_name: enamelDetails ? `${enamelDetails.color} Enamel` : 'Enamel',
@@ -396,7 +397,7 @@ const generateBreakdownHtml = (breakdown: any) => {
     // Handle multiple gemstones - only show if there are actual gemstones
     if (breakdown.gemstone_details && breakdown.gemstone_details.type === 'multiple' && breakdown.gemstone_details.gemstones && breakdown.gemstone_details.gemstones.length > 0) {
         for (const gem of breakdown.gemstone_details.gemstones) {
-            const displayType = (gem.type || '').replace(/_/g, ' ');
+            const displayType = getGemstoneDisplayName(gem.type || '');
             const gemName = `${displayType}${gem.clarity ? ` (${gem.clarity})` : ''}${gem.color ? ` ${gem.color}` : ''}${gem.cut ? ` ${gem.cut}` : ''}`;
 
             let gemSubtext = '';

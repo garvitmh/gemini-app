@@ -23,6 +23,7 @@ import {
 import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
 import { useDebounce } from '../utils/useDebounce';
+import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
 
 interface ProductGemstone {
     id?: string;
@@ -338,7 +339,7 @@ export default function Products() {
         return [
             { label: 'Select type', value: '' },
             ...Array.from(types).map(type => ({
-                label: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' '),
+                label: getGemstoneDisplayName(type),
                 value: type
             }))
         ];
@@ -1433,7 +1434,7 @@ export default function Products() {
                                                     <BlockStack gap="100">
                                                         <Text as="p" variant="bodyMd" fontWeight="semibold">
                                                             {gem.isCustom && <Badge tone="attention">CUSTOM</Badge>}
-                                                            {gem.gemstoneType}
+                                                            {getGemstoneDisplayName(gem.gemstoneType)}
                                                             {gem.gemstoneClarity && ` (${gem.gemstoneClarity})`}
                                                             {gem.gemstoneColor && ` ${gem.gemstoneColor}`}
                                                             {gem.gemstoneCut && ` ${gem.gemstoneCut}`}
@@ -1725,7 +1726,7 @@ export default function Products() {
                                                                         <td style={{ padding: '8px 16px' }}>
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                                                 <span style={{ fontWeight: 500 }}>
-                                                                                    {(gem.type || '').replace(/_/g, ' ')} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
+                                                                                    {getGemstoneDisplayName(gem.type || '').replace(/_/g, ' ')} {gem.clarity && `(${gem.clarity})`} {gem.color} {gem.cut}
                                                                                 </span>
                                                                                 {gem.hasDiscount && <Badge tone="critical">Sale</Badge>}
                                                                                 {gem.isCustom && <Badge tone="info" size="small">CUSTOM</Badge>}
@@ -2080,11 +2081,19 @@ export default function Products() {
 
                         {((gemstoneModalPricingType as string) === 'perCarat' || (gemstoneModalIsCustom && (gemstoneModalPricingType as string) === 'perCarat')) && (
                             <TextField
-                                label="Weight (carats)"
+                                label={
+                                    (gemstoneModalType.toLowerCase().includes('cz') || gemstoneModalType.toLowerCase().includes('cubic zirconia'))
+                                        ? "Weight (grams)"
+                                        : "Weight (carats)"
+                                }
                                 type="number"
                                 value={gemstoneModalWeight}
                                 onChange={setGemstoneModalWeight}
-                                placeholder="Enter weight in carats"
+                                placeholder={
+                                    (gemstoneModalType.toLowerCase().includes('cz') || gemstoneModalType.toLowerCase().includes('cubic zirconia'))
+                                        ? "Enter weight in grams"
+                                        : "Enter weight in carats"
+                                }
                                 autoComplete="off"
                                 helpText="Price will be calculated as: Rate × Weight"
                             />

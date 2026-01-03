@@ -84,7 +84,11 @@
           {% for gem in breakdown.gemstone_details.gemstones %}
             <tr style="border-bottom: 1px solid #f1f2f3;">
               <td style="padding: 10px 16px; color: #374151;">
-                {{ gem.type | replace: '_', ' ' }}
+                {% if gem.type == 'cz' or gem.type == 'CZ' or gem.type == 'c_z' %}
+                  CZ Cubic Zirconia
+                {% else %}
+                  {{ gem.type | replace: '_', ' ' }}
+                {% endif %}
                 {% if gem.clarity %}({{ gem.clarity }}){% endif %}
                 {% if gem.color %}{{ gem.color }}{% endif %}
                 {% if gem.cut %}{{ gem.cut }}{% endif %}
