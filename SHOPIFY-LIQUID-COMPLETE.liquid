@@ -98,8 +98,13 @@
                 {% if gem.rateNotSet %}
                   <div style="font-size: 12px; color: #d93025; font-weight: 600;">⚠️ Rate not set</div>
                 {% elsif gem.weight %}
+                  {% if gem.type == 'cz' or gem.type == 'CZ' or gem.type == 'c_z' %}
+                    {% assign weight_unit = 'gm' %}
+                  {% else %}
+                    {% assign weight_unit = 'ct' %}
+                  {% endif %}
                   {% assign gem_rate = gem.cost | divided_by: gem.weight | divided_by: 100 | round %}
-                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem_rate }}/ct</div>
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}{{ weight_unit }} × ₹{{ gem_rate }}/{{ weight_unit }}</div>
                 {% elsif gem.pieces %}
                   {% assign gem_rate = gem.cost | divided_by: gem.pieces | divided_by: 100 | round %}
                   <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem_rate }}/pc</div>

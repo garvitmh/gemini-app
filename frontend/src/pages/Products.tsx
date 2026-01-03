@@ -1440,7 +1440,7 @@ export default function Products() {
                                                             {gem.gemstoneCut && ` ${gem.gemstoneCut}`}
                                                         </Text>
                                                         <Text as="p" variant="bodySm" tone="subdued">
-                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}ct `}
+                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}${(gem.gemstoneType.toLowerCase().includes('cz') || gem.gemstoneType.toLowerCase().includes('cubic zirconia')) ? 'gm' : 'ct'} `}
                                                             {gem.gemstonePieces && `${gem.gemstonePieces}pcs `}
                                                             {(gem.isCustom && gem.pricePerPiece) && `(₹${gem.pricePerPiece}/pc) `}
                                                             {gem.gemstoneCaratRange && `• Range: ${gem.gemstoneCaratRange} `}
