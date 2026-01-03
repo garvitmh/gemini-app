@@ -1,3 +1,51 @@
+# System Checkpoint: cz-display-fix-stable
+
+**Date:** 2026-01-03
+**Commit Label:** `checkpoint/cz-display-fix-stable`
+**Commit Hash:** `6d44847`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after implementing a comprehensive display-only fix for CZ Cubic Zirconia naming consistency. The system now displays "CZ Cubic Zirconia" instead of just "CZ" across all admin and storefront sections.
+
+### Verified Stable Features
+1.  **Backend Display Transformation**
+    - [x] **New Utility**: Created `backend/src/utils/gemstoneDisplay.ts` with centralized display name mapping.
+    - [x] **API Responses**: All endpoints now return "CZ Cubic Zirconia" in gemstone data.
+    - [x] **Price Breakdown**: Backend-generated HTML and JSON breakdowns show full gemstone names.
+2.  **Frontend Admin Display**
+    - [x] **Rates Page**: Gemstone & Diamond Rates table displays "CZ Cubic Zirconia".
+    - [x] **Products Page - Dropdown**: Add Gemstone modal dropdown shows "CZ Cubic Zirconia".
+    - [x] **Products Page - List**: Gemstone list in product edit shows full names.
+    - [x] **Products Page - Breakdown**: Price breakdown preview shows "CZ Cubic Zirconia".
+    - [x] **Products Page - Weight Label**: CZ weight field shows "Weight (grams)" instead of "Weight (carats)".
+3.  **Shopify Storefront**
+    - [x] **Liquid Template**: Updated `SHOPIFY-LIQUID-COMPLETE.liquid` with CZ special case handling.
+    - [x] **Price Breakdown**: Storefront displays "CZ Cubic Zirconia" when template is uploaded.
+4.  **Safety Guarantees**
+    - [x] No pricing calculations modified (display-only changes).
+    - [x] No rate logic altered (internal keys remain "cz").
+    - [x] No database migrations or data changes.
+    - [x] CZ per-gram conversion logic intact (1g = 5ct).
+    - [x] Backward compatible with existing data.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/cz-display-fix-stable` (hash: `6d44847`).
+2.  **Revert**: `git reset --hard 6d44847`
+3.  **Verify**:
+    - Refresh browser and check Rates page shows "CZ Cubic Zirconia".
+    - Go to Products → Add Gemstone → Verify dropdown shows "CZ Cubic Zirconia".
+    - Check price breakdown displays full gemstone names.
+
+## 📝 Files Modified
+- **NEW**: `backend/src/utils/gemstoneDisplay.ts` (67 lines)
+- **MODIFIED**: `backend/src/server-simple.ts` (4 changes: import + 3 transformations)
+- **MODIFIED**: `frontend/src/pages/Rates.tsx` (2 changes: import + 1 transformation)
+- **MODIFIED**: `frontend/src/pages/Products.tsx` (5 changes: import + 4 transformations including weight label)
+- **MODIFIED**: `SHOPIFY-LIQUID-COMPLETE.liquid` (1 change: CZ special case)
+
+---
+
 # System Checkpoint: making-group-integration-stable
 
 **Date:** 2026-01-03
