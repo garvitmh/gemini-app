@@ -1,3 +1,33 @@
+# System Checkpoint: making-group-integration-stable
+
+**Date:** 2026-01-03
+**Commit Label:** `checkpoint/making-group-integration-stable`
+
+## 🛡️ Stable Baseline Status
+This checkpoint represents the application after the complete integration and verification of the "Making Group" feature. The system now supports defining Master Making Groups and applying them to products, with a strict priority logic (Product > Group > Global) for pricing calculations.
+
+### Verified Stable Features
+1.  **Making Group Management**
+    - [x] **Backend**: New `MakingGroup` entity and CRUD endpoints implemented.
+    - [x] **Frontend**: New "Making Charges" section in Settings for managing master groups.
+    - [x] **Product Association**: Products can be linked to a Making Group via the Edit Modal.
+2.  **Advanced Pricing Logic**
+    - [x] **Priority Resolution**: Calculation logic verified to use Product ID > Making Group ID > Global Settings.
+    - [x] **Bulk Updates**: "Update All Prices" correctly respects group assignments for all products.
+    - [x] **UI Feedback**: Edit Modal clearly shows which rate (Product vs Group) is active.
+3.  **Regression Checks**
+    - [x] Existing products without groups continue to use Global or Product-specific rates (Backward Compatibility).
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/making-group-integration-stable`.
+2.  **Revert**: `git reset --hard checkpoint/making-group-integration-stable`
+3.  **Verify**:
+    - Go to Settings > Making Charges and check if groups exist.
+    - Open a Product, assign a group, and verify the price breakdown updates.
+
+---
+
 # System Checkpoint: custom-gemstone-fix-stable
 
 **Date:** 2026-01-02
