@@ -669,13 +669,16 @@ export default function Products() {
     };
 
     const handleSyncProducts = async () => {
+        console.log('[DEBUG] Sync button clicked');
         // Sync is now handled in background with status in Top Bar
         try {
-            await api.post('/products/sync');
+            console.log('[DEBUG] Sending POST to /products/sync');
+            const res = await api.post('/products/sync');
+            console.log('[DEBUG] POST success', res);
             setSuccessMessage('Sync started. Check progress in top bar.');
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
-            console.error('Error syncing products:', error);
+            console.error('[DEBUG] Error syncing products:', error);
             setError('Failed to start sync.');
         }
     };

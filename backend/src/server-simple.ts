@@ -9,6 +9,8 @@ import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import { BulkPriceUpdateService } from './services/bulkPriceUpdate.service';
+import { ShopifyService } from './services/shopify.service';
+
 import { getGemstoneDisplayName } from './utils/gemstoneDisplay';
 
 const PORT = process.env.PORT || 3000;
@@ -1580,23 +1582,87 @@ app.post('/api/products/update-all-prices', async (req, res) => {
 // Sync products from Shopify
 app.post('/api/products/sync', async (req, res) => {
     try {
+        console.log('[SYNC INFO] Request received at /api/products/sync');
+
         // Check if we have valid Shopify credentials
         if (!SHOPIFY_ACCESS_TOKEN) {
+            console.error('[SYNC ERROR] Missing SHOPIFY_ACCESS_TOKEN');
             return res.status(400).json({
                 error: 'Shopify credentials not configured',
                 message: 'Please set SHOPIFY_ACCESS_TOKEN in backend/.env to sync products'
             });
         }
+        console.log('[SYNC INFO] Credentials present');
 
-        const shop = await prisma.shop.findFirst();
+        // FIXED: Find the SPECIFIC shop matching the env domain, not just "any" shop
+        const shop = await prisma.shop.findUnique({
+            where: { domain: SHOPIFY_STORE }
+        }) || await prisma.shop.findFirst();
+
         if (!shop) {
+            console.error('[SYNC ERROR] Shop not found in DB');
             return res.status(404).json({ error: 'Shop not found' });
         }
+        console.log(`[SYNC INFO] Found shop: ${shop.domain} (ID: ${shop.id})`);
 
-        console.log(`Syncing products from ${SHOPIFY_STORE}...`);
+        console.log(`[SYNC INFO] Initializing ShopifyService for ${shop.domain}...`);
 
-        // Fetch products from Shopify REST API
-        console.log('Making Shopify API request...');
+        // SMART AUTH LOGIC: Try Env Token first, Fallback to DB Token
+        let activeToken = SHOPIFY_ACCESS_TOKEN;
+        let shopifyService = new ShopifyService(shop.domain, activeToken);
+        console.log('[SYNC INFO] Testing connection with Env Token...');
+
+        let isConnected = await shopifyService.testConnection();
+
+        if (!isConnected) {
+            console.warn('[SYNC WARNING] Env Token failed auth check. Trying DB Token from Shop table...');
+            if (shop.accessToken) {
+                activeToken = shop.accessToken;
+                shopifyService = new ShopifyService(shop.domain, activeToken);
+                isConnected = await shopifyService.testConnection();
+                if (isConnected) {
+                    console.log('[SYNC SUCCESS] Connection restored using DB Token!');
+                } else {
+                    console.error('[SYNC ERROR] DB Token also failed.');
+                }
+            } else {
+                console.error('[SYNC ERROR] No DB Token available to fallback.');
+            }
+        }
+
+        if (!isConnected) {
+            console.error('[SYNC ERROR] All auth attempts failed (401).');
+            return res.status(401).json({
+                error: 'Shopify authentication failed',
+                message: 'Invalid API Token. Please update backend/.env or reinstall app.'
+            });
+        }
+
+        // CONCURRENCY GUARD: Check if sync is already running
+        const existingJob = await prisma.job.findFirst({
+            where: {
+                shopId: shop.id,
+                jobType: 'product_sync',
+                status: 'processing',
+                startedAt: { gt: new Date(Date.now() - 1000 * 60 * 5) } // 5 mins timeout
+            }
+        });
+
+        if (existingJob) {
+            console.warn('[SYNC WARNING] Sync request ignored - job already in progress:', existingJob.id);
+            return res.json({
+                success: true,
+                jobId: existingJob.id,
+                message: 'Sync already running',
+                alreadyRunning: true
+            });
+        }
+
+        console.log('[SYNC INFO] Service authorized. Starting Job...');
+        const result = await shopifyService.syncProducts(shop.id);
+        console.log('[SYNC INFO] syncProducts returned:', JSON.stringify(result));
+
+        /* OLD FETCH LOGIC REMOVED
         const response = await axios.get(
             `https://${SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250`,
             {
@@ -1605,58 +1671,14 @@ app.post('/api/products/sync', async (req, res) => {
                 },
                 timeout: 60000, // Increased to 60 seconds
             }
-        );
+        ); */
 
-        console.log('Received response from Shopify.');
-        const shopifyProducts = response.data.products;
-        console.log(`Fetched ${shopifyProducts.length} products to process.`);
-
-        let syncedCount = 0;
-
-        // Process products sequentially (reverted from batch processing)
-        for (const product of shopifyProducts) {
-            const imageUrl = product.image?.src || product.images?.[0]?.src || null;
-            const status = product.status;
-
-            console.log(`Processing product: ${product.title}`);
-
-            for (const variant of product.variants) {
-                try {
-                    await prisma.product.upsert({
-                        where: { shopifyVariantId: `gid://shopify/ProductVariant/${variant.id}` },
-                        create: {
-                            shopId: shop.id,
-                            shopifyProductId: `gid://shopify/Product/${product.id}`,
-                            shopifyVariantId: `gid://shopify/ProductVariant/${variant.id}`,
-                            sku: variant.sku || null,
-                            title: product.title,
-                            variantTitle: variant.title,
-                            imageUrl,
-                            status,
-                            currentPrice: parseFloat(variant.price),
-                        },
-                        update: {
-                            title: product.title,
-                            variantTitle: variant.title,
-                            imageUrl,
-                            status,
-                            currentPrice: parseFloat(variant.price),
-                            sku: variant.sku || null,
-                        },
-                    });
-                    syncedCount++;
-                    if (syncedCount % 10 === 0) {
-                        console.log(`Processed ${syncedCount} variants so far...`);
-                    }
-                } catch (dbError: any) {
-                    console.error(`Error upserting variant ${variant.id}:`, dbError.message);
-                    throw dbError; // Re-throw to be caught by outer catch
-                }
-            }
-        }
-
-        console.log(`✅ Synced ${syncedCount} products from Shopify`);
-        res.json({ success: true, syncedCount });
+        res.json({
+            success: true,
+            jobId: result.jobId,
+            message: 'Sync completed successfully',
+            counts: result.counts
+        });
     } catch (error: any) {
         console.error('❌ Error syncing products:');
         console.error('Error message:', error.message);
@@ -2529,9 +2551,30 @@ app.put('/api/products/:id', async (req, res) => {
         } else {
             res.json({ success: true, product });
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error updating product:', error);
-        res.status(500).json({ error: 'Failed to update product' });
+        res.status(500).json({ error: error.message || 'Failed to update product' });
+    }
+});
+
+// Get sync status
+app.get('/api/sync/status', async (req, res) => {
+    try {
+        const latestJob = await prisma.job.findFirst({
+            where: { jobType: 'product_sync' },
+            orderBy: { startedAt: 'desc' },
+        });
+
+        if (!latestJob) {
+            return res.json({ job: null });
+        }
+
+        res.json({
+            job: latestJob
+        });
+    } catch (error: any) {
+        console.error('Error checking sync status:', error);
+        res.status(500).json({ error: 'Failed to check status' });
     }
 });
 
@@ -2658,7 +2701,7 @@ app.get('/api/products/:id/price-breakdown', async (req, res) => {
     try {
         const { id } = req.params;
 
-        const product = await prisma.product.findUnique({ where: { id } });
+        const product = await prisma.product.findUnique({ where: { id }, include: { gemstones: true, makingGroup: true } });
         if (!product || !product.weightGrams || !product.metal) {
             return res.status(400).json({ error: 'Product must have weight and metal set' });
         }

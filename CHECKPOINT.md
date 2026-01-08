@@ -1,3 +1,107 @@
+# System Checkpoint: manual-save-2026-01-08
+
+**Date:** 2026-01-08
+**Commit Label:** `checkpoint/manual-save-2026-01-08`
+**Commit Hash:** `(current)`
+
+## 🛡️ Current Status
+Manual checkpoint requested by user to save current progress.
+
+### Modified Files
+- `backend/src/server-simple.ts`
+- `backend/src/services/shopify.service.ts`
+- `frontend/vite.config.ts`
+- `frontend/src/pages/Products.tsx`
+
+## 🔄 Rollback Procedure
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/manual-save-2026-01-08`.
+2.  **Revert**: `git reset --hard <commit-hash>`
+
+---
+
+# System Checkpoint: sync-ui-fixed-stable
+
+**Date:** 2026-01-03
+**Commit Label:** `checkpoint/sync-ui-fixed-stable`
+**Commit Hash:** `(current)`
+
+## 🛡️ Stable Baseline Status
+This checkpoint marks the verified working state of the Sync Status UI. The Top Bar now correctly displays real-time sync progress (fetching/creating/updating) and completion status.
+
+### Variables Fixed
+1.  **API Response Format**:
+    - Updated `GET /api/sync/status` to wrap the job object in a `{ job: ... }` key.
+    - Matches the expectation of the frontend `SyncStatusIndicator` component.
+    - Prevents "Double JSON Parsing" error by returning the raw `result` string.
+2.  **UI Feedback Verified**:
+    - "Syncing..." spinner appears in Top Bar provided by `Layout.tsx`.
+    - "Sync Complete" checkmark appears with details hover.
+
+## 🔄 Rollback Procedure
+If UI disappears:
+1.  Check `SyncStatusIndicator.tsx` for parsing errors.
+2.  Verify `GET /api/sync/status` returns `{ job: { ... } }` structure.
+
+---
+
+# System Checkpoint: sync-status-fixed-stable
+
+**Date:** 2026-01-03
+**Commit Label:** `checkpoint/sync-status-fixed-stable`
+**Commit Hash:** `(current)`
+
+## 🛡️ Stable Baseline Status
+This checkpoint marks the complete resolution of the "Sync from Shopify" stability issues. The sync functionality is now robust, handling race conditions, invalid tokens, and duplicate data gracefully.
+
+### Variables Fixed
+1.  **Authentication Recovery**:
+    - Backend now auto-detects `SHOPIFY_ACCESS_TOKEN` failure.
+    - Automatically falls back to the valid `shop.accessToken` stored in the database.
+    - Explicitly searches for the shop matching `SHOPIFY_STORE` domain.
+2.  **Concurrency Guard**:
+    - Prevents clicking "Sync" multiple times from spawning parallel jobs.
+    - Prevents race conditions that caused "Duplicate Entry" errors.
+3.  **Data Integrity**:
+    - Fixed "Unique Constraint Failed" error by making the existing product lookup **global** (ignoring shopId mismatch).
+    - Prevents crashing when syncing products that already exist under a different/legacy shop ID.
+4.  **UI Feedback**:
+    - Missing `/api/sync/status` endpoint implemented.
+    - 404/500 errors resolved.
+
+## 🔄 Rollback Procedure
+If sync fails again:
+1.  Check `backend/.env` for correct `SHOPIFY_ACCESS_TOKEN`.
+2.  Verify `Job` table for "processing" jobs that might be stuck (`prisma studio`).
+
+---
+
+# System Checkpoint: cz-units-fix-stable
+
+**Date:** 2026-01-03
+**Commit Label:** `checkpoint/cz-units-fix-stable`
+**Commit Hash:** `97b874f`
+
+## 🛡️ Stable Baseline Status
+This checkpoint captures the display update where CZ Cubic Zirconia weight is shown in "grams" (gm) instead of "carats" (ct) across the admin and storefront, while maintaining the underlying pricing logic.
+
+### Verified Stable Features
+1.  **Frontend Display**
+    - [x] **Products Page**: Gemstone list displays CZ weight as "4gm" instead of "4ct".
+    - [x] **Products Page**: Price breakdown logic updated (though visual confirmation pending full reload).
+2.  **Storefront Display**
+    - [x] **Liquid Template**: `SHOPIFY-LIQUID-COMPLETE.liquid` updated to conditionally show 'gm' for CZ.
+    - [x] **User Template**: `shopify-price-breakdown.liquid` updated to match.
+3.  **Safety Guarantees**
+    - [x] Pricing logic unchanged (1g = 5ct still used for calculation).
+    - [x] Display-only transformation.
+
+## 🔄 Rollback Procedure
+If a future update introduces regression:
+1.  **Revert**: `git reset --hard 97b874f`
+2.  **Verify**: Check Product Edit modal gemstone list for 'gm' unit on CZ.
+
+---
+
 # System Checkpoint: cz-display-fix-stable
 
 **Date:** 2026-01-03

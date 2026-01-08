@@ -25,6 +25,19 @@ export class ShopifyService {
   }
 
   /**
+   * Verify Shopify connection is valid
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.client.request(gql`{ shop { name } }`);
+      return true;
+    } catch (error) {
+      console.error('[ShopifyService] Connection test failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Update a single product variant price
    */
   async updateVariantPrice(variantId: string, price: number): Promise<boolean> {
@@ -274,13 +287,13 @@ export class ShopifyService {
 
     const query = gql`
       query($after: String) {
-        products(first: 250, after: $after) {
+        products(first: 50, after: $after) {
           edges {
             node {
               id
               title
               status
-              variants(first: 100) {
+              variants(first: 50) {
                 edges {
                   node {
                     id
@@ -304,78 +317,127 @@ export class ShopifyService {
     let hasNextPage = true;
     let cursor: string | null = null;
     let iteration = 0;
-    const MAX_PAGES = 100; // Safety guard
+    const MAX_PAGES = 200; // Increased safety guard for larger catalogs
     const allSeenVariantIds = new Set<string>();
 
     try {
       while (hasNextPage && iteration < MAX_PAGES) {
         iteration++;
+        console.log(`[SYNC] Fetching page ${iteration}...`);
+
         const result: any = await this.client.request(query, { after: cursor });
         const products = result.products.edges;
 
+        if (products.length === 0) break;
+
+        // --- BATCH PROCESSING START ---
+
+        // 1. Flatten all variants from this page
+        const pageVariants: any[] = [];
+        const variantMap = new Map<string, { product: any, variant: any }>();
+
         for (const productEdge of products) {
           const product = productEdge.node;
-
           for (const variantEdge of product.variants.edges) {
             const variant = variantEdge.node;
             counts.fetched++;
             allSeenVariantIds.add(variant.id);
-
-            try {
-              const price = parseFloat(variant.price);
-              const safePrice = isNaN(price) ? 0 : price;
-
-              // OPTIMIZATION: Check if exists and needs update
-              const existing = await prisma.product.findUnique({
-                where: { shopifyVariantId: variant.id }
-              });
-
-              if (existing) {
-                // Check for changes
-                const hasChanges =
-                  existing.title !== product.title ||
-                  existing.variantTitle !== variant.title ||
-                  existing.sku !== (variant.sku || null) ||
-                  Math.abs((existing.currentPrice || 0) - safePrice) > 0.01 || // Float comparison
-                  existing.status !== product.status; // Sync Shopify status too
-
-                if (hasChanges) {
-                  await prisma.product.update({
-                    where: { id: existing.id },
-                    data: {
-                      title: product.title,
-                      variantTitle: variant.title,
-                      sku: variant.sku || null,
-                      currentPrice: safePrice,
-                      status: product.status, // ACTIVE/ARCHIVED/DRAFT
-                      updatedAt: new Date()
-                    }
-                  });
-                  counts.updated++;
-                } else {
-                  counts.unchanged++;
-                }
-              } else {
-                // New Product
-                await prisma.product.create({
-                  data: {
-                    shopId,
-                    shopifyProductId: product.id,
-                    shopifyVariantId: variant.id,
-                    sku: variant.sku || null,
-                    title: product.title,
-                    variantTitle: variant.title,
-                    currentPrice: safePrice,
-                    status: product.status,
-                  }
-                });
-                counts.created++;
-              }
-            } catch (upsertError: any) {
-              console.error(`[SYNC] Failed to process variant ${variant.id}:`, (upsertError as Error).message);
-            }
+            // Map variant ID to full data needed for sync
+            variantMap.set(variant.id, { product, variant });
+            pageVariants.push(variant.id);
           }
         }
+
+        if (pageVariants.length > 0) {
+          // 2. Fetch ALL existing products for these variants in ONE query
+          // FIXED: Check globally (ignore shopId) to prevent unique constraint errors
+          // if the product exists under a different shop record.
+          const existingProducts = await prisma.product.findMany({
+            where: {
+              shopifyVariantId: { in: pageVariants }
+            }
+          });
+
+          // Create a lookup for existing products
+          const existingMap = new Map<string, any>();
+          existingProducts.forEach(p => existingMap.set(p.shopifyVariantId, p));
+
+          // 3. Separate into To-Create and To-Update
+          const toCreate: any[] = [];
+          const toUpdate: any[] = [];
+
+          variantMap.forEach(({ product, variant }, variantId) => {
+            const existing = existingMap.get(variantId);
+            const price = parseFloat(variant.price);
+            const safePrice = isNaN(price) ? 0 : price;
+
+            if (existing) {
+              // Check for changes
+              const hasChanges =
+                existing.title !== product.title ||
+                existing.variantTitle !== variant.title ||
+                existing.sku !== (variant.sku || null) ||
+                Math.abs((existing.currentPrice || 0) - safePrice) > 0.01 ||
+                existing.status !== product.status;
+
+              if (hasChanges) {
+                toUpdate.push({
+                  id: existing.id,
+                  data: {
+                    title: product.title,
+                    variantTitle: variant.title,
+                    sku: variant.sku || null,
+                    currentPrice: safePrice,
+                    status: product.status,
+                    updatedAt: new Date()
+                  }
+                });
+              } else {
+                counts.unchanged++;
+              }
+            } else {
+              // Prepare for bulk creation
+              toCreate.push({
+                shopId,
+                shopifyProductId: product.id,
+                shopifyVariantId: variant.id,
+                sku: variant.sku || null,
+                title: product.title,
+                variantTitle: variant.title,
+                currentPrice: safePrice,
+                status: product.status,
+              });
+            }
+          });
+
+          // 4. Perform Bulk Updates/Inserts
+
+          // Bulk Create
+          if (toCreate.length > 0) {
+            await prisma.product.createMany({
+              data: toCreate
+            });
+            counts.created += toCreate.length;
+          }
+
+          // Bulk Update (Prisma doesn't support bulk update with different values yet, so we use Promise.all)
+          // Limit concurrency to avoid connection pool exhaustion
+          if (toUpdate.length > 0) {
+            const BATCH_SIZE = 20;
+            for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+              const batch = toUpdate.slice(i, i + BATCH_SIZE);
+              await Promise.all(batch.map(item =>
+                prisma.product.update({
+                  where: { id: item.id },
+                  data: item.data
+                })
+              ));
+            }
+            counts.updated += toUpdate.length;
+          }
+        }
+
+        // --- BATCH PROCESSING END ---
 
         // Update Job Progress
         await prisma.job.update({
@@ -396,9 +458,13 @@ export class ShopifyService {
 
       // DELETION DETECTION (Feature 2)
       // Find products in DB that were NOT seen in this sync
+      // NOTE: For very large catalogs, passing 'notIn' with thousands of IDs can be slow.
+      // But for <10k products it should be fine.
+
       const deletedInShopify = await prisma.product.findMany({
         where: {
           shopId,
+          status: { not: 'deleted' }, // Only check active/archived/draft
           shopifyVariantId: { notIn: Array.from(allSeenVariantIds) }
         },
         select: { id: true }
@@ -406,8 +472,7 @@ export class ShopifyService {
 
       if (deletedInShopify.length > 0) {
         const idsToDelete = deletedInShopify.map(p => p.id);
-        // SAFETY: Instead of hard delete, we mark as 'deleted' status
-        // Assuming 'deleted' is not a standard Shopify status so it distinguishes them
+        // Soft delete
         await prisma.product.updateMany({
           where: { id: { in: idsToDelete } },
           data: { status: 'deleted' }
