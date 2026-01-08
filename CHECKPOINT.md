@@ -1,3 +1,30 @@
+# System Checkpoint: collection-filter-checkpoint
+
+**Date:** 2026-01-08
+**Commit Label:** `checkpoint/collection-filter-checkpoint`
+**Commit Hash:** `(current)`
+
+## 🛡️ Current Status
+This checkpoint represents the stable implementation of the Shopify Collection-based filtering. Products can now be filtered by collection in both the Products section and the Making Groups modal.
+
+### Verified Features
+- [x] **ShopifyService**: `getCollections` and `getCollectionProductIds` implemented.
+- [x] **Backend API**: `/api/shopify/collections` (with caching) and updated `/api/products` & `/api/products/for-assignment` endpoints.
+- [x] **Frontend UI**: Integrated Collection dropdown filter in `Products.tsx` and `MakingGroups.tsx`.
+- [x] **Fail Softly**: UI remains functional if Shopify API fails.
+
+### Modified Files
+- `backend/src/server-simple.ts`
+- `backend/src/services/shopify.service.ts`
+- `frontend/src/pages/MakingGroups.tsx`
+- `frontend/src/pages/Products.tsx`
+
+## 🔄 Rollback Procedure
+1.  **Identify Checkpoint**: Commit labeled `checkpoint/collection-filter-checkpoint`.
+2.  **Revert**: `git reset --hard <commit-hash>`
+
+---
+
 # System Checkpoint: manual-save-2026-01-08
 
 **Date:** 2026-01-08

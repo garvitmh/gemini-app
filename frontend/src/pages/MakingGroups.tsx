@@ -73,6 +73,8 @@ export default function MakingGroups() {
     const [assignPage, setAssignPage] = useState(1);
     const [assignTotalPages, setAssignTotalPages] = useState(1);
     const [assignTotal, setAssignTotal] = useState(0);
+    const [collections, setCollections] = useState<Array<{ id: string, title: string }>>([]);
+    const [assignCollection, setAssignCollection] = useState<string>('all');
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [originalAssignedIds, setOriginalAssignedIds] = useState<Set<string>>(new Set());
 
@@ -169,14 +171,25 @@ export default function MakingGroups() {
     const handleManageProducts = async (group: MakingGroup) => {
         setAssigningGroup(group);
         setAssignSearch('');
+        setAssignCollection('all');
         setAssignPage(1);
         setSelectedProductIds(new Set());
         setOriginalAssignedIds(new Set());
         setShowAssignModal(true);
-        await fetchProductsForAssignment(group.id, 1, '');
+        fetchCollections();
+        await fetchProductsForAssignment(group.id, 1, '', 'all');
     };
 
-    const fetchProductsForAssignment = async (groupId: string, page: number, search: string) => {
+    const fetchCollections = async () => {
+        try {
+            const response = await api.get('/api/shopify/collections');
+            setCollections(response.data.collections || []);
+        } catch (err) {
+            console.error('Error fetching collections:', err);
+        }
+    };
+
+    const fetchProductsForAssignment = async (groupId: string, page: number, search: string, collectionId: string) => {
         try {
             setAssignLoading(true);
             const response = await api.get('/products/for-assignment', {
@@ -185,6 +198,7 @@ export default function MakingGroups() {
                     limit: 10,
                     search: search || undefined,
                     excludeGroupId: groupId,
+                    collectionId: collectionId !== 'all' ? collectionId : undefined
                 }
             });
 
@@ -227,14 +241,22 @@ export default function MakingGroups() {
     const handleAssignSearchSubmit = () => {
         setAssignPage(1);
         if (assigningGroup) {
-            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch);
+            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch, assignCollection);
+        }
+    };
+
+    const handleAssignCollectionChange = (value: string) => {
+        setAssignCollection(value);
+        setAssignPage(1);
+        if (assigningGroup) {
+            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch, value);
         }
     };
 
     const handleAssignPageChange = (newPage: number) => {
         setAssignPage(newPage);
         if (assigningGroup) {
-            fetchProductsForAssignment(assigningGroup.id, newPage, assignSearch);
+            fetchProductsForAssignment(assigningGroup.id, newPage, assignSearch, assignCollection);
         }
     };
 
@@ -502,7 +524,7 @@ export default function MakingGroups() {
                         onAction: () => setShowAssignModal(false),
                     },
                 ]}
-                large
+                size="large"
             >
                 <Modal.Section>
                     <BlockStack gap="400">
@@ -519,6 +541,18 @@ export default function MakingGroups() {
                                     connectedRight={
                                         <Button onClick={handleAssignSearchSubmit}>Search</Button>
                                     }
+                                />
+                            </div>
+                            <div style={{ minWidth: '150px' }}>
+                                <Select
+                                    label=""
+                                    labelHidden
+                                    options={[
+                                        { label: 'All Collections', value: 'all' },
+                                        ...collections.map(c => ({ label: c.title, value: c.id }))
+                                    ]}
+                                    value={assignCollection}
+                                    onChange={handleAssignCollectionChange}
                                 />
                             </div>
                         </InlineStack>

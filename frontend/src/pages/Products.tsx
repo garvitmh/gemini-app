@@ -168,6 +168,8 @@ export default function Products() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalServerItems, setTotalServerItems] = useState(0);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
+    const [collections, setCollections] = useState<Array<{ id: string, title: string }>>([]);
+    const [collectionFilter, setCollectionFilter] = useState<string>('all');
     const ITEMS_PER_PAGE = 50;
 
     // Reset pagination when filter changes
@@ -262,7 +264,17 @@ export default function Products() {
         fetchProducts();
         fetchAllGemstoneRates();
         fetchMakingGroups();
-    }, [debouncedSearch, currentPage]);
+        fetchCollections();
+    }, [debouncedSearch, currentPage, collectionFilter]);
+
+    const fetchCollections = async () => {
+        try {
+            const res = await api.get('/api/shopify/collections');
+            setCollections(res.data.collections || []);
+        } catch (e) {
+            console.error('Error fetching collections', e);
+        }
+    };
 
     const fetchMakingGroups = async () => {
         try {
@@ -411,7 +423,8 @@ export default function Products() {
                 params: {
                     page: currentPage,
                     limit: ITEMS_PER_PAGE,
-                    search: debouncedSearch
+                    search: debouncedSearch,
+                    collectionId: collectionFilter !== 'all' ? collectionFilter : undefined
                 },
             });
 
@@ -1211,6 +1224,17 @@ export default function Products() {
                                         autoComplete="off"
                                         clearButton
                                         onClearButtonClick={() => setSearchQuery('')}
+                                    />
+                                </div>
+                                <div style={{ minWidth: '200px' }}>
+                                    <Select
+                                        label="Collection"
+                                        options={[
+                                            { label: 'All Collections', value: 'all' },
+                                            ...collections.map(c => ({ label: c.title, value: c.id }))
+                                        ]}
+                                        value={collectionFilter}
+                                        onChange={(val) => setCollectionFilter(val)}
                                     />
                                 </div>
                                 <div style={{ minWidth: '150px' }}>

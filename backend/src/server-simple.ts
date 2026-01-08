@@ -1192,10 +1192,28 @@ app.get('/api/products/for-assignment', async (req, res) => {
             return res.status(404).json({ error: 'Shop not found' });
         }
 
-        const { page = 1, limit = 20, search, excludeGroupId } = req.query;
+        const { page = 1, limit = 50, search, excludeGroupId, collectionId } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
         const where: any = { shopId: shop.id };
+
+        // Handle collection filter
+        if (collectionId && collectionId !== 'all') {
+            const cacheKey = `${shop.id}:${collectionId}`;
+            const cached = collectionProductsCache.get(cacheKey);
+            let productIds: string[] = [];
+
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+                productIds = cached.productIds;
+            } else {
+                const shopifyService = new ShopifyService(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN);
+                productIds = await shopifyService.getCollectionProductIds(collectionId as string);
+                collectionProductsCache.set(cacheKey, { productIds, timestamp: Date.now() });
+            }
+
+            where.shopifyProductId = { in: productIds };
+        }
+
         if (search) {
             where.OR = [
                 { sku: { contains: search as string } },
@@ -1503,6 +1521,58 @@ app.get('/api/audit/history', async (req, res) => {
     }
 });
 
+// ==================== SHOPIFY COLLECTIONS API ====================
+
+// In-memory cache for collections and product IDs (simple session-based)
+const collectionsCache = new Map<string, { collections: any[], timestamp: number }>();
+const collectionProductsCache = new Map<string, { productIds: string[], timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
+app.get('/api/shopify/collections', async (req, res) => {
+    try {
+        console.log('📬 GET /api/shopify/collections');
+        const shop = await prisma.shop.findFirst();
+        if (!shop) {
+            console.error('❌ Shop not found for collections');
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+
+        console.log(`🔍 Fetching collections for shop: ${shop.domain}`);
+
+        // Robust Token Selection (Env first, then DB)
+        let activeToken = SHOPIFY_ACCESS_TOKEN;
+        let shopifyService = new ShopifyService(shop.domain, activeToken);
+        let isConnected = await shopifyService.testConnection();
+
+        if (!isConnected && shop.accessToken) {
+            console.log('🔄 Env token failed, trying DB token');
+            activeToken = shop.accessToken;
+            shopifyService = new ShopifyService(shop.domain, activeToken);
+            isConnected = await shopifyService.testConnection();
+        }
+
+        if (!isConnected) {
+            console.error('❌ Shopify connection failed with both Env and DB tokens');
+            return res.status(401).json({ error: 'Shopify authentication failed. Please check API credentials.' });
+        }
+
+        const collections = await shopifyService.getCollections();
+
+        console.log(`✅ Success: Fetched ${collections.length} collections`);
+
+        // Update cache
+        collectionsCache.set(shop.id, { collections, timestamp: Date.now() });
+
+        res.json({ collections });
+    } catch (error: any) {
+        console.error('❌ Error fetching collections:', error);
+        res.status(500).json({ error: 'Failed to fetch collections', details: error.message });
+    }
+});
+
+// ==================== END SHOPIFY COLLECTIONS API ====================
+
+
 // Get products
 app.get('/api/products', async (req, res) => {
     try {
@@ -1511,10 +1581,28 @@ app.get('/api/products', async (req, res) => {
             return res.status(404).json({ error: 'Shop not found' });
         }
 
-        const { page = 1, limit = 50, search } = req.query;
+        const { page = 1, limit = 50, search, collectionId } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
         const where: any = { shopId: shop.id };
+
+        // Handle collection filter
+        if (collectionId && collectionId !== 'all') {
+            const cacheKey = `${shop.id}:${collectionId}`;
+            const cached = collectionProductsCache.get(cacheKey);
+            let productIds: string[] = [];
+
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+                productIds = cached.productIds;
+            } else {
+                const shopifyService = new ShopifyService(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN);
+                productIds = await shopifyService.getCollectionProductIds(collectionId as string);
+                collectionProductsCache.set(cacheKey, { productIds, timestamp: Date.now() });
+            }
+
+            where.shopifyProductId = { in: productIds };
+        }
+
         if (search) {
             // SQLite's LIKE operator (used by contains) is case-insensitive by default
             where.OR = [

@@ -516,6 +516,78 @@ export class ShopifyService {
   }
 
   /**
+   * Fetch all collections (Smart + Manual) from Shopify
+   */
+  async getCollections(): Promise<Array<{ id: string; title: string }>> {
+    const query = gql`
+      query {
+        collections(first: 250) {
+          edges {
+            node {
+              id
+              title
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const result: any = await this.client.request(query);
+      return result.collections.edges.map((edge: any) => ({
+        id: edge.node.id,
+        title: edge.node.title,
+      }));
+    } catch (error) {
+      console.error('[ShopifyService] Error fetching collections:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch all product IDs belonging to a specific collection
+   */
+  async getCollectionProductIds(collectionId: string): Promise<string[]> {
+    const query = gql`
+      query($id: ID!, $after: String) {
+        collection(id: $id) {
+          products(first: 250, after: $after) {
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    `;
+
+    let productIds: string[] = [];
+    let hasNextPage = true;
+    let cursor: string | null = null;
+
+    try {
+      while (hasNextPage) {
+        const result: any = await this.client.request(query, { id: collectionId, after: cursor });
+        const products = result.collection.products;
+
+        productIds.push(...products.edges.map((edge: any) => edge.node.id));
+
+        hasNextPage = products.pageInfo.hasNextPage;
+        cursor = products.pageInfo.endCursor;
+      }
+      return productIds;
+    } catch (error) {
+      console.error(`[ShopifyService] Error fetching product IDs for collection ${collectionId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Create Shopify service instance for a shop
    */
   static async forShop(shopDomain: string): Promise<ShopifyService> {
