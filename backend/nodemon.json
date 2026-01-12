@@ -1,0 +1,12 @@
+{
+    "ignore": [
+        "*.log",
+        "forensic_diagnostic.log",
+        "node_modules/**"
+    ],
+    "watch": [
+        "src/**/*.ts",
+        ".env"
+    ],
+    "ext": "ts,json"
+}

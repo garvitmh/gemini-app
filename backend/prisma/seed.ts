@@ -7,9 +7,9 @@ async function main() {
 
     // Create a sample shop (for testing without Shopify OAuth)
     const shop = await prisma.shop.upsert({
-        where: { domain: 'test-shop.myshopify.com' },
+        where: { domain: 'daginawala11.myshopify.com' },
         create: {
-            domain: 'test-shop.myshopify.com',
+            domain: 'daginawala11.myshopify.com',
             accessToken: 'test_token',
             scope: 'write_products,read_products',
             isActive: true,
@@ -114,9 +114,13 @@ async function main() {
     ];
 
     for (const product of products) {
-        await prisma.product.create({
-            data: {
+        await prisma.product.upsert({
+            where: { shopifyVariantId: product.shopifyVariantId },
+            create: {
                 shopId: shop.id,
+                ...product,
+            },
+            update: {
                 ...product,
             },
         });

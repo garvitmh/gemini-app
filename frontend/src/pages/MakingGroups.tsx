@@ -23,6 +23,7 @@ import {
 } from '@shopify/polaris';
 import { PlusIcon, SearchIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
+import CollectionFilter from '../components/CollectionFilter';
 
 interface MakingGroup {
     id: string;
@@ -70,11 +71,10 @@ export default function MakingGroups() {
     const [assignProducts, setAssignProducts] = useState<ProductForAssignment[]>([]);
     const [assignLoading, setAssignLoading] = useState(false);
     const [assignSearch, setAssignSearch] = useState('');
+    const [assignCollectionId, setAssignCollectionId] = useState('');
     const [assignPage, setAssignPage] = useState(1);
     const [assignTotalPages, setAssignTotalPages] = useState(1);
     const [assignTotal, setAssignTotal] = useState(0);
-    const [collections, setCollections] = useState<Array<{ id: string, title: string }>>([]);
-    const [assignCollection, setAssignCollection] = useState<string>('all');
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [originalAssignedIds, setOriginalAssignedIds] = useState<Set<string>>(new Set());
 
@@ -171,25 +171,15 @@ export default function MakingGroups() {
     const handleManageProducts = async (group: MakingGroup) => {
         setAssigningGroup(group);
         setAssignSearch('');
-        setAssignCollection('all');
+        setAssignCollectionId('');
         setAssignPage(1);
         setSelectedProductIds(new Set());
         setOriginalAssignedIds(new Set());
         setShowAssignModal(true);
-        fetchCollections();
-        await fetchProductsForAssignment(group.id, 1, '', 'all');
+        await fetchProductsForAssignment(group.id, 1, '');
     };
 
-    const fetchCollections = async () => {
-        try {
-            const response = await api.get('/api/shopify/collections');
-            setCollections(response.data.collections || []);
-        } catch (err) {
-            console.error('Error fetching collections:', err);
-        }
-    };
-
-    const fetchProductsForAssignment = async (groupId: string, page: number, search: string, collectionId: string) => {
+    const fetchProductsForAssignment = async (groupId: string, page: number, search: string) => {
         try {
             setAssignLoading(true);
             const response = await api.get('/products/for-assignment', {
@@ -198,7 +188,7 @@ export default function MakingGroups() {
                     limit: 10,
                     search: search || undefined,
                     excludeGroupId: groupId,
-                    collectionId: collectionId !== 'all' ? collectionId : undefined
+                    collectionId: assignCollectionId || undefined,
                 }
             });
 
@@ -241,22 +231,22 @@ export default function MakingGroups() {
     const handleAssignSearchSubmit = () => {
         setAssignPage(1);
         if (assigningGroup) {
-            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch, assignCollection);
+            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch);
         }
     };
 
-    const handleAssignCollectionChange = (value: string) => {
-        setAssignCollection(value);
-        setAssignPage(1);
-        if (assigningGroup) {
-            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch, value);
+    // Effect to refetch when collection changes, but only if modal is open
+    useEffect(() => {
+        if (showAssignModal && assigningGroup) {
+            setAssignPage(1);
+            fetchProductsForAssignment(assigningGroup.id, 1, assignSearch);
         }
-    };
+    }, [assignCollectionId]);
 
     const handleAssignPageChange = (newPage: number) => {
         setAssignPage(newPage);
         if (assigningGroup) {
-            fetchProductsForAssignment(assigningGroup.id, newPage, assignSearch, assignCollection);
+            fetchProductsForAssignment(assigningGroup.id, newPage, assignSearch);
         }
     };
 
@@ -524,7 +514,7 @@ export default function MakingGroups() {
                         onAction: () => setShowAssignModal(false),
                     },
                 ]}
-                size="large"
+                large
             >
                 <Modal.Section>
                     <BlockStack gap="400">
@@ -543,18 +533,11 @@ export default function MakingGroups() {
                                     }
                                 />
                             </div>
-                            <div style={{ minWidth: '150px' }}>
-                                <Select
-                                    label=""
-                                    labelHidden
-                                    options={[
-                                        { label: 'All Collections', value: 'all' },
-                                        ...collections.map(c => ({ label: c.title, value: c.id }))
-                                    ]}
-                                    value={assignCollection}
-                                    onChange={handleAssignCollectionChange}
-                                />
-                            </div>
+                            <CollectionFilter
+                                selectedCollectionId={assignCollectionId}
+                                onCollectionChange={setAssignCollectionId}
+                                disabled={assignLoading}
+                            />
                         </InlineStack>
 
                         <Text as="p" tone="subdued">

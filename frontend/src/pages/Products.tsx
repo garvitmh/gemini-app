@@ -24,6 +24,7 @@ import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon } from '@shopif
 import api from '../utils/api';
 import { useDebounce } from '../utils/useDebounce';
 import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
+import CollectionFilter from '../components/CollectionFilter';
 
 interface ProductGemstone {
     id?: string;
@@ -168,14 +169,13 @@ export default function Products() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalServerItems, setTotalServerItems] = useState(0);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
-    const [collections, setCollections] = useState<Array<{ id: string, title: string }>>([]);
-    const [collectionFilter, setCollectionFilter] = useState<string>('all');
+    const [collectionId, setCollectionId] = useState('');
     const ITEMS_PER_PAGE = 50;
 
     // Reset pagination when filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [statusFilter]);
+    }, [statusFilter, collectionId]);
 
     const toggleGroup = (baseName: string) => {
         setExpandedGroupId(prev => prev === baseName ? null : baseName);
@@ -264,17 +264,7 @@ export default function Products() {
         fetchProducts();
         fetchAllGemstoneRates();
         fetchMakingGroups();
-        fetchCollections();
-    }, [debouncedSearch, currentPage, collectionFilter]);
-
-    const fetchCollections = async () => {
-        try {
-            const res = await api.get('/api/shopify/collections');
-            setCollections(res.data.collections || []);
-        } catch (e) {
-            console.error('Error fetching collections', e);
-        }
-    };
+    }, [debouncedSearch, currentPage, collectionId]);
 
     const fetchMakingGroups = async () => {
         try {
@@ -424,7 +414,7 @@ export default function Products() {
                     page: currentPage,
                     limit: ITEMS_PER_PAGE,
                     search: debouncedSearch,
-                    collectionId: collectionFilter !== 'all' ? collectionFilter : undefined
+                    collectionId: collectionId || undefined
                 },
             });
 
@@ -682,16 +672,13 @@ export default function Products() {
     };
 
     const handleSyncProducts = async () => {
-        console.log('[DEBUG] Sync button clicked');
         // Sync is now handled in background with status in Top Bar
         try {
-            console.log('[DEBUG] Sending POST to /products/sync');
-            const res = await api.post('/products/sync');
-            console.log('[DEBUG] POST success', res);
+            await api.post('/products/sync');
             setSuccessMessage('Sync started. Check progress in top bar.');
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
-            console.error('[DEBUG] Error syncing products:', error);
+            console.error('Error syncing products:', error);
             setError('Failed to start sync.');
         }
     };
@@ -1226,17 +1213,11 @@ export default function Products() {
                                         onClearButtonClick={() => setSearchQuery('')}
                                     />
                                 </div>
-                                <div style={{ minWidth: '200px' }}>
-                                    <Select
-                                        label="Collection"
-                                        options={[
-                                            { label: 'All Collections', value: 'all' },
-                                            ...collections.map(c => ({ label: c.title, value: c.id }))
-                                        ]}
-                                        value={collectionFilter}
-                                        onChange={(val) => setCollectionFilter(val)}
-                                    />
-                                </div>
+                                <CollectionFilter
+                                    selectedCollectionId={collectionId}
+                                    onCollectionChange={setCollectionId}
+                                    disabled={loading}
+                                />
                                 <div style={{ minWidth: '150px' }}>
                                     <Select
                                         label="Status"
@@ -1467,7 +1448,7 @@ export default function Products() {
                                                             {gem.gemstoneCut && ` ${gem.gemstoneCut}`}
                                                         </Text>
                                                         <Text as="p" variant="bodySm" tone="subdued">
-                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}${(gem.gemstoneType.toLowerCase().includes('cz') || gem.gemstoneType.toLowerCase().includes('cubic zirconia')) ? 'gm' : 'ct'} `}
+                                                            {gem.gemstoneWeight && `${gem.gemstoneWeight}ct `}
                                                             {gem.gemstonePieces && `${gem.gemstonePieces}pcs `}
                                                             {(gem.isCustom && gem.pricePerPiece) && `(₹${gem.pricePerPiece}/pc) `}
                                                             {gem.gemstoneCaratRange && `• Range: ${gem.gemstoneCaratRange} `}

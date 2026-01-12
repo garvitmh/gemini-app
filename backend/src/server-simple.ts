@@ -10,7 +10,6 @@ import fs from 'fs';
 import path from 'path';
 import { BulkPriceUpdateService } from './services/bulkPriceUpdate.service';
 import { ShopifyService } from './services/shopify.service';
-
 import { getGemstoneDisplayName } from './utils/gemstoneDisplay';
 
 const PORT = process.env.PORT || 3000;
@@ -1192,33 +1191,25 @@ app.get('/api/products/for-assignment', async (req, res) => {
             return res.status(404).json({ error: 'Shop not found' });
         }
 
-        const { page = 1, limit = 50, search, excludeGroupId, collectionId } = req.query;
+        const { page = 1, limit = 20, search, excludeGroupId, collectionId } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
         const where: any = { shopId: shop.id };
-
-        // Handle collection filter
-        if (collectionId && collectionId !== 'all') {
-            const cacheKey = `${shop.id}:${collectionId}`;
-            const cached = collectionProductsCache.get(cacheKey);
-            let productIds: string[] = [];
-
-            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-                productIds = cached.productIds;
-            } else {
-                const shopifyService = new ShopifyService(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN);
-                productIds = await shopifyService.getCollectionProductIds(collectionId as string);
-                collectionProductsCache.set(cacheKey, { productIds, timestamp: Date.now() });
-            }
-
-            where.shopifyProductId = { in: productIds };
-        }
-
         if (search) {
             where.OR = [
                 { sku: { contains: search as string } },
                 { title: { contains: search as string } },
             ];
+        }
+
+        // Apply Collection Filter
+        if (collectionId && SHOPIFY_ACCESS_TOKEN) {
+            const productIds = await ShopifyService.getCollectionProductIds(SHOPIFY_ACCESS_TOKEN, collectionId as string);
+            if (productIds.length > 0) {
+                where.shopifyProductId = { in: productIds };
+            } else {
+                where.shopifyProductId = { in: [] };
+            }
         }
 
         const [products, total] = await Promise.all([
@@ -1521,57 +1512,23 @@ app.get('/api/audit/history', async (req, res) => {
     }
 });
 
-// ==================== SHOPIFY COLLECTIONS API ====================
-
-// In-memory cache for collections and product IDs (simple session-based)
-const collectionsCache = new Map<string, { collections: any[], timestamp: number }>();
-const collectionProductsCache = new Map<string, { productIds: string[], timestamp: number }>();
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+// ==================== SHOPIFY COLLECTIONS ====================
 
 app.get('/api/shopify/collections', async (req, res) => {
     try {
-        console.log('📬 GET /api/shopify/collections');
-        const shop = await prisma.shop.findFirst();
-        if (!shop) {
-            console.error('❌ Shop not found for collections');
-            return res.status(404).json({ error: 'Shop not found' });
+        // Since this is a simple local dev layout, we use the env variable.
+        // In a real app with multiple shops, we would look up the accessToken for the current shop.
+        if (!SHOPIFY_ACCESS_TOKEN) {
+            return res.json([]); // Fail softly as requested
         }
 
-        console.log(`🔍 Fetching collections for shop: ${shop.domain}`);
-
-        // Robust Token Selection (Env first, then DB)
-        let activeToken = SHOPIFY_ACCESS_TOKEN;
-        let shopifyService = new ShopifyService(shop.domain, activeToken);
-        let isConnected = await shopifyService.testConnection();
-
-        if (!isConnected && shop.accessToken) {
-            console.log('🔄 Env token failed, trying DB token');
-            activeToken = shop.accessToken;
-            shopifyService = new ShopifyService(shop.domain, activeToken);
-            isConnected = await shopifyService.testConnection();
-        }
-
-        if (!isConnected) {
-            console.error('❌ Shopify connection failed with both Env and DB tokens');
-            return res.status(401).json({ error: 'Shopify authentication failed. Please check API credentials.' });
-        }
-
-        const collections = await shopifyService.getCollections();
-
-        console.log(`✅ Success: Fetched ${collections.length} collections`);
-
-        // Update cache
-        collectionsCache.set(shop.id, { collections, timestamp: Date.now() });
-
-        res.json({ collections });
-    } catch (error: any) {
-        console.error('❌ Error fetching collections:', error);
-        res.status(500).json({ error: 'Failed to fetch collections', details: error.message });
+        const collections = await ShopifyService.getAllCollections(SHOPIFY_ACCESS_TOKEN);
+        res.json(collections);
+    } catch (error) {
+        console.error('Error fetching collections:', error);
+        res.json([]);
     }
 });
-
-// ==================== END SHOPIFY COLLECTIONS API ====================
-
 
 // Get products
 app.get('/api/products', async (req, res) => {
@@ -1586,29 +1543,27 @@ app.get('/api/products', async (req, res) => {
 
         const where: any = { shopId: shop.id };
 
-        // Handle collection filter
-        if (collectionId && collectionId !== 'all') {
-            const cacheKey = `${shop.id}:${collectionId}`;
-            const cached = collectionProductsCache.get(cacheKey);
-            let productIds: string[] = [];
-
-            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-                productIds = cached.productIds;
-            } else {
-                const shopifyService = new ShopifyService(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN);
-                productIds = await shopifyService.getCollectionProductIds(collectionId as string);
-                collectionProductsCache.set(cacheKey, { productIds, timestamp: Date.now() });
-            }
-
-            where.shopifyProductId = { in: productIds };
-        }
-
         if (search) {
             // SQLite's LIKE operator (used by contains) is case-insensitive by default
             where.OR = [
                 { sku: { contains: search as string } },
                 { title: { contains: search as string } },
             ];
+        }
+
+        // Apply Collection Filter
+        if (collectionId && SHOPIFY_ACCESS_TOKEN) {
+            const productIds = await ShopifyService.getCollectionProductIds(SHOPIFY_ACCESS_TOKEN, collectionId as string);
+
+            // If productIds is empty, it means collection is empty or error.
+            // We should match products where shopifyProductId is in this list.
+            if (productIds.length > 0) {
+                where.shopifyProductId = { in: productIds };
+            } else {
+                // Return empty result if collection is effectively empty
+                // Or we can assume it really has no products.
+                where.shopifyProductId = { in: [] };
+            }
         }
 
         const [products, total] = await Promise.all([
@@ -1670,87 +1625,23 @@ app.post('/api/products/update-all-prices', async (req, res) => {
 // Sync products from Shopify
 app.post('/api/products/sync', async (req, res) => {
     try {
-        console.log('[SYNC INFO] Request received at /api/products/sync');
-
         // Check if we have valid Shopify credentials
         if (!SHOPIFY_ACCESS_TOKEN) {
-            console.error('[SYNC ERROR] Missing SHOPIFY_ACCESS_TOKEN');
             return res.status(400).json({
                 error: 'Shopify credentials not configured',
                 message: 'Please set SHOPIFY_ACCESS_TOKEN in backend/.env to sync products'
             });
         }
-        console.log('[SYNC INFO] Credentials present');
 
-        // FIXED: Find the SPECIFIC shop matching the env domain, not just "any" shop
-        const shop = await prisma.shop.findUnique({
-            where: { domain: SHOPIFY_STORE }
-        }) || await prisma.shop.findFirst();
-
+        const shop = await prisma.shop.findFirst();
         if (!shop) {
-            console.error('[SYNC ERROR] Shop not found in DB');
             return res.status(404).json({ error: 'Shop not found' });
         }
-        console.log(`[SYNC INFO] Found shop: ${shop.domain} (ID: ${shop.id})`);
 
-        console.log(`[SYNC INFO] Initializing ShopifyService for ${shop.domain}...`);
+        console.log(`Syncing products from ${SHOPIFY_STORE}...`);
 
-        // SMART AUTH LOGIC: Try Env Token first, Fallback to DB Token
-        let activeToken = SHOPIFY_ACCESS_TOKEN;
-        let shopifyService = new ShopifyService(shop.domain, activeToken);
-        console.log('[SYNC INFO] Testing connection with Env Token...');
-
-        let isConnected = await shopifyService.testConnection();
-
-        if (!isConnected) {
-            console.warn('[SYNC WARNING] Env Token failed auth check. Trying DB Token from Shop table...');
-            if (shop.accessToken) {
-                activeToken = shop.accessToken;
-                shopifyService = new ShopifyService(shop.domain, activeToken);
-                isConnected = await shopifyService.testConnection();
-                if (isConnected) {
-                    console.log('[SYNC SUCCESS] Connection restored using DB Token!');
-                } else {
-                    console.error('[SYNC ERROR] DB Token also failed.');
-                }
-            } else {
-                console.error('[SYNC ERROR] No DB Token available to fallback.');
-            }
-        }
-
-        if (!isConnected) {
-            console.error('[SYNC ERROR] All auth attempts failed (401).');
-            return res.status(401).json({
-                error: 'Shopify authentication failed',
-                message: 'Invalid API Token. Please update backend/.env or reinstall app.'
-            });
-        }
-
-        // CONCURRENCY GUARD: Check if sync is already running
-        const existingJob = await prisma.job.findFirst({
-            where: {
-                shopId: shop.id,
-                jobType: 'product_sync',
-                status: 'processing',
-                startedAt: { gt: new Date(Date.now() - 1000 * 60 * 5) } // 5 mins timeout
-            }
-        });
-
-        if (existingJob) {
-            console.warn('[SYNC WARNING] Sync request ignored - job already in progress:', existingJob.id);
-            return res.json({
-                success: true,
-                jobId: existingJob.id,
-                message: 'Sync already running',
-                alreadyRunning: true
-            });
-        }
-
-        console.log('[SYNC INFO] Service authorized. Starting Job...');
-        const result = await shopifyService.syncProducts(shop.id);
-        console.log('[SYNC INFO] syncProducts returned:', JSON.stringify(result));
-
-        /* OLD FETCH LOGIC REMOVED
+        // Fetch products from Shopify REST API
+        console.log('Making Shopify API request...');
         const response = await axios.get(
             `https://${SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250`,
             {
@@ -1759,14 +1650,58 @@ app.post('/api/products/sync', async (req, res) => {
                 },
                 timeout: 60000, // Increased to 60 seconds
             }
-        ); */
+        );
 
-        res.json({
-            success: true,
-            jobId: result.jobId,
-            message: 'Sync completed successfully',
-            counts: result.counts
-        });
+        console.log('Received response from Shopify.');
+        const shopifyProducts = response.data.products;
+        console.log(`Fetched ${shopifyProducts.length} products to process.`);
+
+        let syncedCount = 0;
+
+        // Process products sequentially (reverted from batch processing)
+        for (const product of shopifyProducts) {
+            const imageUrl = product.image?.src || product.images?.[0]?.src || null;
+            const status = product.status;
+
+            console.log(`Processing product: ${product.title}`);
+
+            for (const variant of product.variants) {
+                try {
+                    await prisma.product.upsert({
+                        where: { shopifyVariantId: `gid://shopify/ProductVariant/${variant.id}` },
+                        create: {
+                            shopId: shop.id,
+                            shopifyProductId: `gid://shopify/Product/${product.id}`,
+                            shopifyVariantId: `gid://shopify/ProductVariant/${variant.id}`,
+                            sku: variant.sku || null,
+                            title: product.title,
+                            variantTitle: variant.title,
+                            imageUrl,
+                            status,
+                            currentPrice: parseFloat(variant.price),
+                        },
+                        update: {
+                            title: product.title,
+                            variantTitle: variant.title,
+                            imageUrl,
+                            status,
+                            currentPrice: parseFloat(variant.price),
+                            sku: variant.sku || null,
+                        },
+                    });
+                    syncedCount++;
+                    if (syncedCount % 10 === 0) {
+                        console.log(`Processed ${syncedCount} variants so far...`);
+                    }
+                } catch (dbError: any) {
+                    console.error(`Error upserting variant ${variant.id}:`, dbError.message);
+                    throw dbError; // Re-throw to be caught by outer catch
+                }
+            }
+        }
+
+        console.log(`✅ Synced ${syncedCount} products from Shopify`);
+        res.json({ success: true, syncedCount });
     } catch (error: any) {
         console.error('❌ Error syncing products:');
         console.error('Error message:', error.message);
@@ -1783,213 +1718,111 @@ app.post('/api/products/sync', async (req, res) => {
     }
 });
 
+// --- SINGLE SOURCE OF TRUTH FOR TEMPLATE STRUCTURE ---
+const PRODUCT_TEMPLATE_COLUMNS = [
+    // Identity
+    'SKU',
+    'Title',
+    'Status',
+    'Collection',
+
+    // Metal
+    'Metal Type',
+    'Metal Purity',
+    'Metal Weight (g)',
+    'Gross Weight (g)',
+    'Wastage %',
+
+    // Gemstone 1
+    'Stone 1: Used', 'Stone 1: Type', 'Stone 1: Shape', 'Stone 1: Quality',
+    'Stone 1: Color', 'Stone 1: Clarity', 'Stone 1: Cut',
+    'Stone 1: Weight (ct)', 'Stone 1: Pieces',
+    'Stone 1: Rate Type', 'Stone 1: Rate Value', 'Stone 1: Custom',
+
+    // Gemstone 2
+    'Stone 2: Used', 'Stone 2: Type', 'Stone 2: Shape', 'Stone 2: Quality',
+    'Stone 2: Color', 'Stone 2: Clarity', 'Stone 2: Cut',
+    'Stone 2: Weight (ct)', 'Stone 2: Pieces',
+    'Stone 2: Rate Type', 'Stone 2: Rate Value', 'Stone 2: Custom',
+
+    // Gemstone 3
+    'Stone 3: Used', 'Stone 3: Type', 'Stone 3: Shape', 'Stone 3: Quality',
+    'Stone 3: Color', 'Stone 3: Clarity', 'Stone 3: Cut',
+    'Stone 3: Weight (ct)', 'Stone 3: Pieces',
+    'Stone 3: Rate Type', 'Stone 3: Rate Value', 'Stone 3: Custom',
+
+    // Enamel
+    'Enamel Color',
+    'Enamel Weight (g)',
+    'Enamel Discount Type',
+    'Enamel Discount Value',
+
+    // Discounts & Tax
+    'Discount Type',
+    'Discount Value',
+    'GST %',
+
+    // System / Read-only
+    'Current Price',
+    'Last Synced'
+];
+
 // Download sample template for import
 app.get('/api/products/template', async (req, res) => {
     try {
         const format = (req.query.format as string) || 'xlsx';
 
-        // Headers for the template
-        const headers = {
-            SKU: 'Example: GOLD-RING-001',
-            Title: 'Example: Gold Ring with Diamond',
-            weightGrams: 'Example: 5.5',
-            metal: 'Example: gold',
-            karat: 'Example: 22',
-            makingChargeType: 'per_gram/percent/flat',
-            makingChargeValue: 'Example: 1500',
-            CurrentPrice: '(Read-only)',
-            gemstone_1_type: 'diamond',
-            gemstone_1_cut: 'Excellent',
-            gemstone_1_color: 'D',
-            gemstone_1_clarity: 'VS1',
-            gemstone_1_weight: 0.5,
-            gemstone_1_pieces: 1,
-            gemstone_1_isCustom: 'FALSE',
-            gemstone_1_pricePerCarat: '',
-            gemstone_1_pricePerPiece: '',
-            gemstone_2_type: '',
-            gemstone_2_cut: '',
-            gemstone_2_color: '',
-            gemstone_2_clarity: '',
-            gemstone_2_weight: '',
-            gemstone_2_pieces: '',
-            gemstone_2_isCustom: '',
-            gemstone_2_pricePerCarat: '',
-            gemstone_2_pricePerPiece: '',
-            gemstone_3_type: '',
-            gemstone_3_cut: '',
-            gemstone_3_color: '',
-            gemstone_3_clarity: '',
-            gemstone_3_weight: '',
-            gemstone_3_pieces: '',
-            gemstone_3_isCustom: '',
-            gemstone_3_pricePerCarat: '',
-            gemstone_3_pricePerPiece: '',
-            gemstones_json: '(Optional: Only if you need more than 3 gemstones)'
-        };
+        // Headers object for CSV generation (Key = Value)
+        const headers: Record<string, string> = {};
+        PRODUCT_TEMPLATE_COLUMNS.forEach(col => headers[col] = col);
 
-        // Note row for merchants
         const note = {
-            SKU: 'NOTE:',
-            Title: 'Fill gemstone columns directly. Supports up to 3 gemstones. Leave blank if not applicable.',
-            weightGrams: '',
-            metal: '',
-            karat: '',
-            makingChargeType: '',
-            makingChargeValue: '',
-            CurrentPrice: 'Auto-calculated. Do not edit.',
-            gemstone_1_type: '',
-            gemstone_1_cut: '',
-            gemstone_1_color: '',
-            gemstone_1_clarity: '',
-            gemstone_1_weight: '',
-            gemstone_1_pieces: '',
-            gemstone_1_isCustom: 'TRUE/FALSE',
-            gemstone_1_pricePerCarat: 'If weight-based',
-            gemstone_1_pricePerPiece: 'Priority override',
-            gemstone_2_type: '',
-            gemstone_2_cut: '',
-            gemstone_2_color: '',
-            gemstone_2_clarity: '',
-            gemstone_2_weight: '',
-            gemstone_2_pieces: '',
-            gemstone_2_isCustom: '',
-            gemstone_2_pricePerCarat: '',
-            gemstone_2_pricePerPiece: '',
-            gemstone_3_type: '',
-            gemstone_3_cut: '',
-            gemstone_3_color: '',
-            gemstone_3_clarity: '',
-            gemstone_3_weight: '',
-            gemstone_3_pieces: '',
-            gemstone_3_isCustom: '',
-            gemstone_3_pricePerCarat: '',
-            gemstone_3_pricePerPiece: '',
-            gemstones_json: ''
+            SKU: 'NOTE: Do not modify identifying columns. Making Charges are EXCLUDED.',
+            'Metal Type': 'gold, silver, platinum',
+            'Wastage %': '0-100',
+            'Stone 1: Used': 'Natural, Lab Grown',
+            'Stone 1: Custom': 'TRUE/FALSE',
+            'Enamel Discount Type': 'flat, percent, none',
+            'Discount Type': 'flat, percent'
         };
 
-        // Real Sample Row 1: Gold Ring
         const sampleGold = {
             SKU: 'GOLD-RING-001',
-            Title: 'Sample 22K Gold Ring',
-            weightGrams: 5.5,
-            metal: 'gold',
-            karat: 22,
-            makingChargeType: 'per_gram',
-            makingChargeValue: 1500,
-            CurrentPrice: '',
-            gemstone_1_type: 'diamond',
-            gemstone_1_cut: 'Excellent',
-            gemstone_1_color: 'D',
-            gemstone_1_clarity: 'VS1',
-            gemstone_1_weight: 0.5,
-            gemstone_1_pieces: 1,
-            gemstone_1_isCustom: '',
-            gemstone_1_pricePerCarat: '',
-            gemstone_1_pricePerPiece: '',
-            gemstone_2_type: '',
-            gemstone_2_cut: '',
-            gemstone_2_color: '',
-            gemstone_2_clarity: '',
-            gemstone_2_weight: '',
-            gemstone_2_pieces: '',
-            gemstone_2_isCustom: '',
-            gemstone_2_pricePerCarat: '',
-            gemstone_2_pricePerPiece: '',
-            gemstone_3_type: '',
-            gemstone_3_cut: '',
-            gemstone_3_color: '',
-            gemstone_3_clarity: '',
-            gemstone_3_weight: '',
-            gemstone_3_pieces: '',
-            gemstone_3_isCustom: '',
-            gemstone_3_pricePerCarat: '',
-            gemstone_3_pricePerPiece: '',
-            gemstones_json: ''
+            Title: 'Gold Ring',
+            Status: 'active',
+            Collection: 'Rings',
+            'Metal Type': 'gold',
+            'Metal Purity': '22',
+            'Metal Weight (g)': 5.5,
+            'Gross Weight (g)': 6.1,
+            'Wastage %': 2.0,
+            'Stone 1: Used': 'Natural',
+            'Stone 1: Type': 'diamond',
+            'Stone 1: Shape': 'Round',
+            'Stone 1: Quality': 'Precious',
+            'Stone 1: Color': 'D',
+            'Stone 1: Clarity': 'VS1',
+            'Stone 1: Cut': 'Excellent',
+            'Stone 1: Weight (ct)': 0.5,
+            'Stone 1: Pieces': 1,
+            'Stone 1: Rate Type': 'carat',
+            'Stone 1: Rate Value': '',
+            'Stone 1: Custom': 'FALSE',
+            'Enamel Color': 'Red',
+            'Enamel Weight (g)': 0.1,
+            'Enamel Discount Type': 'none',
+            'Enamel Discount Value': 0,
+            'Discount Type': 'flat',
+            'Discount Value': 0,
+            'GST %': 3.0,
+            'Current Price': '(Read-only)',
+            'Last Synced': '2023-01-01'
         };
 
-        // Real Sample Row 2: Silver Bracelet
-        const sampleSilver = {
-            SKU: 'SILVER-BRACE-001',
-            Title: 'Sample 925 Silver Bracelet',
-            weightGrams: 15.0,
-            metal: 'silver',
-            karat: 925,
-            makingChargeType: 'flat',
-            makingChargeValue: 500,
-            CurrentPrice: '',
-            gemstone_1_type: '',
-            gemstone_1_cut: '',
-            gemstone_1_color: '',
-            gemstone_1_clarity: '',
-            gemstone_1_weight: '',
-            gemstone_1_pieces: '',
-            gemstone_1_isCustom: '',
-            gemstone_1_pricePerCarat: '',
-            gemstone_1_pricePerPiece: '',
-            gemstone_2_type: '',
-            gemstone_2_cut: '',
-            gemstone_2_color: '',
-            gemstone_2_clarity: '',
-            gemstone_2_weight: '',
-            gemstone_2_pieces: '',
-            gemstone_2_isCustom: '',
-            gemstone_2_pricePerCarat: '',
-            gemstone_2_pricePerPiece: '',
-            gemstone_3_type: '',
-            gemstone_3_cut: '',
-            gemstone_3_color: '',
-            gemstone_3_clarity: '',
-            gemstone_3_weight: '',
-            gemstone_3_pieces: '',
-            gemstone_3_isCustom: '',
-            gemstone_3_pricePerCarat: '',
-            gemstone_3_pricePerPiece: '',
-            gemstones_json: ''
-        };
+        const combinedData = [headers, note, sampleGold];
 
-        // Actual Headers (Column Names)
-        const columnNames = {
-            SKU: 'SKU',
-            Title: 'Title',
-            weightGrams: 'weightGrams',
-            metal: 'metal',
-            karat: 'karat',
-            makingChargeType: 'makingChargeType',
-            makingChargeValue: 'makingChargeValue',
-            CurrentPrice: 'CurrentPrice',
-            gemstone_1_type: 'gemstone_1_type',
-            gemstone_1_cut: 'gemstone_1_cut',
-            gemstone_1_color: 'gemstone_1_color',
-            gemstone_1_clarity: 'gemstone_1_clarity',
-            gemstone_1_weight: 'gemstone_1_weight',
-            gemstone_1_pieces: 'gemstone_1_pieces',
-            gemstone_1_isCustom: 'gemstone_1_isCustom',
-            gemstone_1_pricePerCarat: 'gemstone_1_pricePerCarat',
-            gemstone_1_pricePerPiece: 'gemstone_1_pricePerPiece',
-            gemstone_2_type: 'gemstone_2_type',
-            gemstone_2_cut: 'gemstone_2_cut',
-            gemstone_2_color: 'gemstone_2_color',
-            gemstone_2_clarity: 'gemstone_2_clarity',
-            gemstone_2_weight: 'gemstone_2_weight',
-            gemstone_2_pieces: 'gemstone_2_pieces',
-            gemstone_2_isCustom: 'gemstone_2_isCustom',
-            gemstone_2_pricePerCarat: 'gemstone_2_pricePerCarat',
-            gemstone_2_pricePerPiece: 'gemstone_2_pricePerPiece',
-            gemstone_3_type: 'gemstone_3_type',
-            gemstone_3_cut: 'gemstone_3_cut',
-            gemstone_3_color: 'gemstone_3_color',
-            gemstone_3_clarity: 'gemstone_3_clarity',
-            gemstone_3_weight: 'gemstone_3_weight',
-            gemstone_3_pieces: 'gemstone_3_pieces',
-            gemstone_3_isCustom: 'gemstone_3_isCustom',
-            gemstone_3_pricePerCarat: 'gemstone_3_pricePerCarat',
-            gemstone_3_pricePerPiece: 'gemstone_3_pricePerPiece',
-            gemstones_json: 'gemstones_json'
-        };
-
-        const combinedData = [columnNames, headers, note, sampleGold, sampleSilver];
-        const worksheet = xlsx.utils.json_to_sheet(combinedData, { skipHeader: true });
+        // Use strict header order from constant
+        const worksheet = xlsx.utils.json_to_sheet(combinedData, { header: PRODUCT_TEMPLATE_COLUMNS, skipHeader: true });
 
         // UX Improvement: Freeze panes (Header + 2 instructional rows = 3 rows total)
         worksheet['!freeze'] = { xSplit: 0, ySplit: 3 };
@@ -2000,12 +1833,12 @@ app.get('/api/products/template', async (req, res) => {
         if (format === 'csv') {
             const csv = xlsx.utils.sheet_to_csv(worksheet);
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', 'attachment; filename="products_template.csv"');
+            res.setHeader('Content-Disposition', 'attachment; filename="products-template.csv"');
             res.send(csv);
         } else {
             const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', 'attachment; filename="products_template.xlsx"');
+            res.setHeader('Content-Disposition', 'attachment; filename="products-template.xlsx"');
             res.send(buffer);
         }
     } catch (error) {
@@ -2028,49 +1861,74 @@ app.get('/api/products/export', async (req, res) => {
         });
 
         const data = products.map(p => {
-            const exportRow: any = {
-                SKU: p.sku,
-                Title: p.title,
-                weightGrams: p.weightGrams,
-                metal: p.metal,
-                karat: p.karat,
-                makingChargeType: p.makingChargeType,
-                makingChargeValue: p.makingChargeValue,
-                CurrentPrice: p.currentPrice
-            };
+            const row: any = {};
 
-            // Expand up to 3 gemstones
+            // Helper to safely set string value
+            const set = (col: string, val: any) => row[col] = (val !== undefined && val !== null) ? val : '';
+
+            // Identity
+            set('SKU', p.sku);
+            set('Title', p.title);
+            set('Status', p.status);
+            set('Collection', ''); // Read-only
+
+            // Metal
+            set('Metal Type', p.metal);
+            set('Metal Purity', p.karat);
+            set('Metal Weight (g)', p.weightGrams);
+            set('Gross Weight (g)', p.grossGoldWeight);
+            set('Wastage %', p.wastagePct);
+
+            // Gemstones (Fixed slots 1-3)
             for (let i = 0; i < 3; i++) {
                 const gem = p.gemstones && p.gemstones[i];
-                exportRow[`gemstone_${i + 1}_type`] = gem?.gemstoneType || '';
-                exportRow[`gemstone_${i + 1}_cut`] = gem?.gemstoneCut || '';
-                exportRow[`gemstone_${i + 1}_color`] = gem?.gemstoneColor || '';
-                exportRow[`gemstone_${i + 1}_clarity`] = gem?.gemstoneClarity || '';
-                exportRow[`gemstone_${i + 1}_weight`] = gem?.gemstoneWeight || '';
-                exportRow[`gemstone_${i + 1}_pieces`] = gem?.gemstonePieces || '';
+                const prefix = `Stone ${i + 1}`;
+                set(`${prefix}: Used`, gem?.naturalOrLabgrown);
+                set(`${prefix}: Type`, gem?.gemstoneType);
+                set(`${prefix}: Shape`, gem?.shape);
+                set(`${prefix}: Quality`, gem?.quality);
+                set(`${prefix}: Color`, gem?.gemstoneColor);
+                set(`${prefix}: Clarity`, gem?.gemstoneClarity);
+                set(`${prefix}: Cut`, gem?.gemstoneCut);
+                set(`${prefix}: Weight (ct)`, gem?.gemstoneWeight);
+                set(`${prefix}: Pieces`, gem?.gemstonePieces);
+                set(`${prefix}: Rate Type`, gem?.unitType);
+                set(`${prefix}: Rate Value`, gem?.pricePerPiece);
+                set(`${prefix}: Custom`, gem?.isCustom ? 'TRUE' : 'FALSE');
             }
 
-            // Hidden JSON for safety/extended data
-            exportRow.gemstones_json = p.gemstones && p.gemstones.length > 0
-                ? JSON.stringify(p.gemstones)
-                : '';
+            // Enamel
+            set('Enamel Color', p.enamelColor);
+            set('Enamel Weight (g)', p.enamelWeightGrams);
+            set('Enamel Discount Type', p.enamelDiscountType);
+            set('Enamel Discount Value', p.enamelDiscountValue);
 
-            return exportRow;
+            // Discounts & Tax
+            set('Discount Type', p.discountType);
+            set('Discount Value', p.discount);
+            set('GST %', p.gstPct);
+
+            // System
+            set('Current Price', p.currentPrice);
+            set('Last Synced', p.lastPushedAt ? new Date(p.lastPushedAt).toISOString().split('T')[0] : '');
+
+            return row;
         });
 
-        const worksheet = xlsx.utils.json_to_sheet(data);
+        // Generate sheet using the CANONICAL schema for order
+        const worksheet = xlsx.utils.json_to_sheet(data, { header: PRODUCT_TEMPLATE_COLUMNS });
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Products');
 
         if (format === 'csv') {
             const csv = xlsx.utils.sheet_to_csv(worksheet);
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', 'attachment; filename="products.csv"');
+            res.setHeader('Content-Disposition', 'attachment; filename="products-export.csv"');
             res.send(csv);
         } else {
             const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', 'attachment; filename="products.xlsx"');
+            res.setHeader('Content-Disposition', 'attachment; filename="products-export.xlsx"');
             res.send(buffer);
         }
     } catch (error) {
@@ -2100,25 +1958,32 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
 
-        // PHASE 2: Header Contract Assertion
+        // FLEXIBLE HEADER VALIDATION: Support both old and new column names
+        // No longer enforce strict header matching - just check for SKU which is mandatory
         const rawRows: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
-        const actualHeaders = rawRows[0] || [];
-        const expectedHeaders = [
-            'SKU', 'Title', 'weightGrams', 'metal', 'karat',
-            'makingChargeType', 'makingChargeValue', 'CurrentPrice',
-            'gemstone_1_type', 'gemstone_1_cut', 'gemstone_1_color', 'gemstone_1_clarity', 'gemstone_1_weight', 'gemstone_1_pieces',
-            'gemstone_2_type', 'gemstone_2_cut', 'gemstone_2_color', 'gemstone_2_clarity', 'gemstone_2_weight', 'gemstone_2_pieces',
-            'gemstone_3_type', 'gemstone_3_cut', 'gemstone_3_color', 'gemstone_3_clarity', 'gemstone_3_weight', 'gemstone_3_pieces',
-            'gemstones_json'
-        ];
+        const actualHeaders = (rawRows[0] || []).map(h => String(h).trim());
 
+        // STRICT CHECK: Duplicate columns (common issue with broken templates)
+        const headerCounts: Record<string, number> = {};
+        actualHeaders.forEach(h => {
+            if (h) headerCounts[h] = (headerCounts[h] || 0) + 1;
+        });
+        const duplicates = Object.keys(headerCounts).filter(h => headerCounts[h] > 1);
 
-
-        for (const expected of expectedHeaders) {
-            if (!actualHeaders.includes(expected)) {
-                throw new Error(`Header mismatch: Missing expected column "${expected}". Received: ${JSON.stringify(actualHeaders)}`);
-            }
+        if (duplicates.length > 0) {
+            throw new Error(`Import failed: Duplicate columns detected (${duplicates.join(', ')}). Please download a clean template and try again.`);
         }
+
+        // Only check for SKU as mandatory - all other columns are optional for flexibility
+        const hasSKU = actualHeaders.some(h =>
+            h === 'SKU' || h === 'sku' || h === 'Sku'
+        );
+
+        if (!hasSKU) {
+            throw new Error(`Header validation failed: SKU column is required. Received headers: ${JSON.stringify(actualHeaders)}`);
+        }
+
+        console.log(`✅ Import file validated. Found ${actualHeaders.length} columns.`);
 
         const rows: any[] = xlsx.utils.sheet_to_json(sheet);
         let updatedCount = 0;
@@ -2151,6 +2016,14 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
             return isNaN(n) ? null : n;
         };
 
+        // Helper to get value from multiple possible column names (priority: first found)
+        const getColumnValue = (row: any, ...keys: string[]) => {
+            for (const key of keys) {
+                if (row[key] !== undefined) return row[key];
+            }
+            return undefined;
+        };
+
         for (const row of rows) {
             rowIndex++;
             currentRow = row;
@@ -2159,23 +2032,32 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
             if (!sku) continue;
 
             // SAFETY CHECK: Skip instructional rows
-            const skuStr = String(sku);
-            if (skuStr.startsWith('Example:') || skuStr === 'NOTE:' || skuStr === 'SKU' || skuStr.includes('(Read-only)')) {
+            const skuStr = String(sku).trim();
+            if (
+                skuStr.startsWith('Example:') ||
+                skuStr.startsWith('NOTE:') ||
+                skuStr === 'SKU' ||
+                skuStr.includes('(Read-only)') ||
+                skuStr === ''
+            ) {
                 continue;
             }
 
-            // PHASE 3: Required Field Assertions (First Data Row)
+            // PHASE 3: Required Field Assertions (First Data Row) - Support both old and new column names
             if (!firstDataRowProcessed) {
+                const metal = getColumnValue(row, 'Metal Type', 'metal', 'Metal');
+                const karat = getColumnValue(row, 'Metal Purity', 'karat', 'Karat');
+                const weightGrams = getColumnValue(row, 'Metal Weight (g)', 'weightGrams', 'Weight (g)');
 
-                if (!row.metal) throw new Error(`PHASE 3: Missing required field "metal" in row ${rowIndex}`);
-                if (row.karat === undefined || row.karat === null) throw new Error(`PHASE 3: Missing required field "karat" in row ${rowIndex}`);
-                if (row.weightGrams === undefined || row.weightGrams === null) throw new Error(`PHASE 3: Missing required field "weightGrams" in row ${rowIndex}`);
+                if (!metal) throw new Error(`PHASE 3: Missing required field "Metal Type" (or "Metal") in row ${rowIndex}`);
+                if (karat === undefined || karat === null) throw new Error(`PHASE 3: Missing required field "Metal Purity" (or "Karat") in row ${rowIndex}`);
+                if (weightGrams === undefined || weightGrams === null) throw new Error(`PHASE 3: Missing required field "Metal Weight (g)" (or "Weight (g)") in row ${rowIndex}`);
 
-                const kVal = toInt(row.karat);
-                if (kVal === null) throw new Error(`PHASE 3: Invalid "karat" value "${row.karat}" in row ${rowIndex} (expected valid number)`);
+                const kVal = toInt(karat);
+                if (kVal === null) throw new Error(`PHASE 3: Invalid \"karat\" value \"${karat}\" in row ${rowIndex} (expected valid number)`);
 
-                const wVal = toNum(row.weightGrams);
-                if (wVal === null) throw new Error(`PHASE 3: Invalid "weightGrams" value "${row.weightGrams}" in row ${rowIndex} (expected valid number)`);
+                const wVal = toNum(weightGrams);
+                if (wVal === null) throw new Error(`PHASE 3: Invalid \"weightGrams\" value \"${weightGrams}\" in row ${rowIndex} (expected valid number)`);
 
                 firstDataRowProcessed = true;
             }
@@ -2193,15 +2075,53 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                 const updateData: any = {};
                 normalizedRow = updateData;
 
-                // Numeric Normalization
-                if (row.weightGrams !== undefined) updateData.weightGrams = toNum(row.weightGrams);
-                if (row.metal !== undefined) updateData.metal = String(row.metal).trim().toLowerCase();
-                if (row.karat !== undefined) updateData.karat = toInt(row.karat);
-                if (row.Title || row.title) updateData.title = String(row.Title || row.title).trim();
+                // Numeric Normalization - Support unified template map (and legacy)
+                const weightGrams = getColumnValue(row, 'Metal Weight (g)', 'weightGrams', 'Weight (g)');
+                const grossWeight = getColumnValue(row, 'Gross Weight (g)', 'grossGoldWeight', 'Gross Weight');
+                const metal = getColumnValue(row, 'Metal Type', 'metal', 'Metal');
+                const karat = getColumnValue(row, 'Metal Purity', 'karat', 'Karat');
+                const title = getColumnValue(row, 'Title', 'title');
 
-                // Making charge handling
-                if (row.makingChargeType !== undefined) updateData.makingChargeType = row.makingChargeType;
-                if (row.makingChargeValue !== undefined) updateData.makingChargeValue = toNum(row.makingChargeValue);
+                const wastagePct = getColumnValue(row, 'Wastage %', 'wastagePct', 'Wastage');
+                const gstPct = getColumnValue(row, 'GST %', 'gstPct', 'GST');
+
+                // Enamel
+                const enamelColor = getColumnValue(row, 'Enamel Color', 'enamelColor');
+                const enamelWeight = getColumnValue(row, 'Enamel Weight (g)', 'enamelWeightGrams');
+                const enamelDiscType = getColumnValue(row, 'Enamel Discount Type', 'enamelDiscountType');
+                const enamelDiscVal = getColumnValue(row, 'Enamel Discount Value', 'enamelDiscountValue');
+
+                // Discount
+                const discType = getColumnValue(row, 'Discount Type', 'discountType');
+                const discVal = getColumnValue(row, 'Discount Value', 'discount');
+
+                // Legacy Making charge handling (Backward Compat only)
+                const makingChargeType = getColumnValue(row, 'Making Charge Type', 'makingChargeType');
+                const makingChargeValue = getColumnValue(row, 'Making Charge Value', 'makingChargeValue');
+
+                if (weightGrams !== undefined) updateData.weightGrams = toNum(weightGrams);
+                if (grossWeight !== undefined) updateData.grossGoldWeight = toNum(grossWeight);
+                if (metal !== undefined) updateData.metal = String(metal).trim().toLowerCase();
+                if (karat !== undefined) updateData.karat = toInt(karat);
+                if (title) updateData.title = String(title).trim();
+
+                if (wastagePct !== undefined) updateData.wastagePct = toNum(wastagePct);
+                if (gstPct !== undefined) updateData.gstPct = toNum(gstPct);
+
+                // Enamel Update
+                if (enamelColor !== undefined) updateData.enamelColor = String(enamelColor).trim();
+                if (enamelWeight !== undefined) updateData.enamelWeightGrams = toNum(enamelWeight);
+                if (enamelDiscType !== undefined) updateData.enamelDiscountType = String(enamelDiscType).trim();
+                if (enamelDiscVal !== undefined) updateData.enamelDiscountValue = toNum(enamelDiscVal);
+
+                // Discount Update
+                if (discType !== undefined) updateData.discountType = String(discType).trim();
+                if (discVal !== undefined) updateData.discount = toNum(discVal);
+
+
+                // Making charge handling (Legacy)
+                if (makingChargeType !== undefined) updateData.makingChargeType = makingChargeType;
+                if (makingChargeValue !== undefined) updateData.makingChargeValue = toNum(makingChargeValue);
 
                 // Gemstone fields (legacy support)
                 if (row.gemstoneType !== undefined) updateData.gemstoneType = row.gemstoneType;
@@ -2227,26 +2147,52 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                 });
 
                 // Handle gemstones (Expanded Columns + JSON Fallback)
-                // PHASE 3: Gemstone Column Handling Fix
-                const hasExpandedColumns = Object.keys(row).some(k => k.startsWith('gemstone_') && k.endsWith('_type'));
+                // Support both old (gemstone_1_type) and new (Stone 1: Type) column formats
+                const hasOldColumns = Object.keys(row).some(k => k.startsWith('gemstone_') && k.endsWith('_type'));
+                const hasNewColumns = Object.keys(row).some(k => k.includes('Stone ') && k.includes(': Type'));
                 const hasJsonColumn = row.gemstones_json !== undefined;
 
-                if (rowIndex === 4) { // Log for a sample row
-
-                }
-
                 const reconstructedGemstones: any[] = [];
-                if (hasExpandedColumns) {
+
+                // Try new column format first
+                if (hasNewColumns) {
+                    for (let i = 1; i <= 3; i++) {
+                        const type = row[`Stone ${i}: Type`];
+                        if (type && String(type).trim() !== '' && !String(type).startsWith('Example:')) {
+                            reconstructedGemstones.push({
+                                gemstoneType: String(type).trim(),
+                                naturalOrLabgrown: row[`Stone ${i}: Used`] ? String(row[`Stone ${i}: Used`]).trim() : null,
+                                quality: row[`Stone ${i}: Quality`] ? String(row[`Stone ${i}: Quality`]).trim() : null,
+                                shape: row[`Stone ${i}: Shape`] ? String(row[`Stone ${i}: Shape`]).trim() : null,
+                                gemstoneCut: row[`Stone ${i}: Cut`] ? String(row[`Stone ${i}: Cut`]).trim() : null,
+                                gemstoneColor: row[`Stone ${i}: Color`] ? String(row[`Stone ${i}: Color`]).trim() : null,
+                                gemstoneClarity: row[`Stone ${i}: Clarity`] ? String(row[`Stone ${i}: Clarity`]).trim() : null,
+                                gemstoneWeight: toNum(row[`Stone ${i}: Weight (ct)`]),
+                                gemstonePieces: toInt(row[`Stone ${i}: Pieces`]),
+                                isCustom: row[`Stone ${i}: Custom`] === 'TRUE' || row[`Stone ${i}: Custom`] === true,
+                                unitType: row[`Stone ${i}: Rate Type`] ? String(row[`Stone ${i}: Rate Type`]).trim() : 'carat',
+                                pricePerPiece: toNum(row[`Stone ${i}: Rate Value`] || row[`Stone ${i}: Price/Piece`])
+                            });
+                        }
+                    }
+                }
+                // Fallback to old column format
+                else if (hasOldColumns) {
                     for (let i = 1; i <= 3; i++) {
                         const type = row[`gemstone_${i}_type`];
                         if (type && String(type).trim() !== '' && !String(type).startsWith('Example:')) {
                             reconstructedGemstones.push({
                                 gemstoneType: String(type).trim(),
+                                naturalOrLabgrown: row[`gemstone_${i}_naturalOrLabgrown`] ? String(row[`gemstone_${i}_naturalOrLabgrown`]).trim() : null,
+                                quality: row[`gemstone_${i}_quality`] ? String(row[`gemstone_${i}_quality`]).trim() : null,
+                                shape: row[`gemstone_${i}_shape`] ? String(row[`gemstone_${i}_shape`]).trim() : null,
                                 gemstoneCut: row[`gemstone_${i}_cut`] ? String(row[`gemstone_${i}_cut`]).trim() : null,
                                 gemstoneColor: row[`gemstone_${i}_color`] ? String(row[`gemstone_${i}_color`]).trim() : null,
                                 gemstoneClarity: row[`gemstone_${i}_clarity`] ? String(row[`gemstone_${i}_clarity`]).trim() : null,
                                 gemstoneWeight: toNum(row[`gemstone_${i}_weight`]),
                                 gemstonePieces: toInt(row[`gemstone_${i}_pieces`]),
+                                isCustom: row[`gemstone_${i}_isCustom`] === 'TRUE' || row[`gemstone_${i}_isCustom`] === true,
+                                pricePerPiece: toNum(row[`gemstone_${i}_pricePerPiece`])
                             });
                         }
                     }
@@ -2255,8 +2201,8 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                 // Resolve final gemstones array
                 let finalGemstones = reconstructedGemstones;
 
-                // If NOT using expanded columns OR expanded were empty, check gemstones_json
-                if (!hasExpandedColumns || reconstructedGemstones.length === 0) {
+                // If NOT using expanded columns OR expanded were empty, check gemstones_json (backward compatibility)
+                if (!hasNewColumns && !hasOldColumns || reconstructedGemstones.length === 0) {
                     if (row.gemstones_json && String(row.gemstones_json).trim() !== '' && !String(row.gemstones_json).startsWith('(Optional')) {
                         try {
                             const parsed = JSON.parse(row.gemstones_json);
@@ -2264,12 +2210,13 @@ app.post('/api/products/import', upload.single('file'), async (req: any, res) =>
                                 finalGemstones = parsed;
                             }
                         } catch (e: any) {
+                            // Silently ignore JSON parse errors for backward compatibility
                         }
                     }
                 }
 
                 // Gating: Only update gemstones if at least one gemstone column was present
-                const shouldUpdateGemstones = hasExpandedColumns || hasJsonColumn;
+                const shouldUpdateGemstones = hasNewColumns || hasOldColumns || hasJsonColumn;
 
                 if (shouldUpdateGemstones && !Array.isArray(finalGemstones)) {
                     throw new Error(`PHASE 4: finalGemstones is not an array for SKU ${skuStr}`);
@@ -2639,30 +2586,9 @@ app.put('/api/products/:id', async (req, res) => {
         } else {
             res.json({ success: true, product });
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('Error updating product:', error);
-        res.status(500).json({ error: error.message || 'Failed to update product' });
-    }
-});
-
-// Get sync status
-app.get('/api/sync/status', async (req, res) => {
-    try {
-        const latestJob = await prisma.job.findFirst({
-            where: { jobType: 'product_sync' },
-            orderBy: { startedAt: 'desc' },
-        });
-
-        if (!latestJob) {
-            return res.json({ job: null });
-        }
-
-        res.json({
-            job: latestJob
-        });
-    } catch (error: any) {
-        console.error('Error checking sync status:', error);
-        res.status(500).json({ error: 'Failed to check status' });
+        res.status(500).json({ error: 'Failed to update product' });
     }
 });
 
@@ -2789,7 +2715,7 @@ app.get('/api/products/:id/price-breakdown', async (req, res) => {
     try {
         const { id } = req.params;
 
-        const product = await prisma.product.findUnique({ where: { id }, include: { gemstones: true, makingGroup: true } });
+        const product = await prisma.product.findUnique({ where: { id } });
         if (!product || !product.weightGrams || !product.metal) {
             return res.status(400).json({ error: 'Product must have weight and metal set' });
         }
