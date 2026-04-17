@@ -35,10 +35,10 @@
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% if breakdown.has_metal_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                Rs. {{ breakdown.metal_value_original | times: 0.01 | round: 2 }}
+                Rs. {{ breakdown.metal_value_original | round: 2 }}
               </div>
             {% endif %}
-            Rs. {{ breakdown.metal_value | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.metal_value | round: 2 }}
           </td>
         </tr>
         
@@ -48,7 +48,7 @@
             Wastage ({{ breakdown.wastage_pct }}%)
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
-            Rs. {{ breakdown.wastage_amount | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.wastage_amount | round: 2 }}
           </td>
         </tr>
         
@@ -72,10 +72,10 @@
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% if breakdown.has_making_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                Rs. {{ breakdown.making_charges_original | times: 0.01 | round: 2 }}
+                Rs. {{ breakdown.making_charges_original | round: 2 }}
               </div>
             {% endif %}
-            Rs. {{ breakdown.making_charges | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.making_charges | round: 2 }}
           </td>
         </tr>
         
@@ -111,10 +111,10 @@
                 {% else %}
                   {% if gem.hasDiscount %}
                     <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                      Rs. {{ gem.cost | times: 0.01 | round: 2 }}
+                      Rs. {{ gem.cost | round: 2 }}
                     </div>
                   {% endif %}
-                  Rs. {{ gem.finalCost | times: 0.01 | round: 2 }}
+                  Rs. {{ gem.finalCost | round: 2 }}
                 {% endif %}
               </td>
             </tr>
@@ -125,7 +125,7 @@
             <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
               <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
               <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
-                Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
+                Rs. {{ breakdown.gemstone_price | round: 2 }}
               </td>
             </tr>
           {% endif %}
@@ -142,10 +142,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_gemstone_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  Rs. {{ breakdown.gemstone_price_original | times: 0.01 | round: 2 }}
+                  Rs. {{ breakdown.gemstone_price_original | round: 2 }}
                 </div>
               {% endif %}
-              Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
+              Rs. {{ breakdown.gemstone_price | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -162,10 +162,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_enamel_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  Rs. {{ breakdown.enamel_price_original | times: 0.01 | round: 2 }}
+                  Rs. {{ breakdown.enamel_price_original | round: 2 }}
                 </div>
               {% endif %}
-              Rs. {{ breakdown.enamel_price | times: 0.01 | round: 2 }}
+              Rs. {{ breakdown.enamel_price | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -176,7 +176,7 @@
             Subtotal
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
-            Rs. {{ breakdown.subtotal | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.subtotal | round: 2 }}
           </td>
         </tr>
         
@@ -186,7 +186,7 @@
             GST ({{ breakdown.gst_pct }}%)
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
-            Rs. {{ breakdown.gst_amount | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.gst_amount | round: 2 }}
           </td>
         </tr>
         
@@ -195,7 +195,7 @@
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #d93025;">Shop Discount</td>
             <td style="padding: 10px 16px; text-align: right; color: #d93025;">
-              Rs. {{ breakdown.discount | times: 0.01 | round: 2 }}
+              Rs. {{ breakdown.discount | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -205,7 +205,7 @@
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #d93025;">Product Discount</td>
             <td style="padding: 10px 16px; text-align: right; color: #d93025;">
-              Rs. {{ breakdown.product_discount | times: 0.01 | round: 2 }}
+              Rs. {{ breakdown.product_discount | round: 2 }}
             </td>
           </tr>
         {% endif %}
@@ -217,10 +217,10 @@
           <td style="padding: 12px 16px; text-align: right; font-weight: 600; font-size: 15px; color: #166534;">
             {% if breakdown.has_any_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px; font-weight: 400;">
-                Rs. {{ breakdown.total_original | times: 0.01 | round: 2 }}
+                Rs. {{ breakdown.total_original | round: 2 }}
               </div>
             {% endif %}
-            Rs. {{ breakdown.total | times: 0.01 | round: 2 }}
+            Rs. {{ breakdown.total | round: 2 }}
           </td>
         </tr>
         

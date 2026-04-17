@@ -71,19 +71,33 @@ router.post('/update', async (req, res) => {
             where: { shopId: shop.id, metal, karat: karat || null },
             orderBy: { updatedAt: 'desc' },
         });
-        // Create new rate
-        const newRate = await prisma.metalRate.create({
-            data: {
-                shopId: shop.id,
-                metal,
-                karat: karat || null,
-                purity: purity || null,
-                ratePerGram,
-                rateSource,
-                reason,
-                updatedBy: shopDomain, // In a real app, this would be the user ID
-            },
-        });
+        // Create or update rate
+        let newRate;
+        if (oldRate) {
+            newRate = await prisma.metalRate.update({
+                where: { id: oldRate.id },
+                data: {
+                    purity: purity || null,
+                    ratePerGram,
+                    rateSource,
+                    reason,
+                    updatedBy: shopDomain,
+                },
+            });
+        } else {
+            newRate = await prisma.metalRate.create({
+                data: {
+                    shopId: shop.id,
+                    metal,
+                    karat: karat || null,
+                    purity: purity || null,
+                    ratePerGram,
+                    rateSource,
+                    reason,
+                    updatedBy: shopDomain,
+                },
+            });
+        }
         // Create audit log
         await prisma.auditLog.create({
             data: {

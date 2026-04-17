@@ -31,16 +31,16 @@
               <span style="margin-left:8px; font-size:11px; color:#d93025; background:#fee2e2; padding:1px 5px; border-radius:3px; font-weight:600; text-transform:uppercase;">Sale</span>
             {% endif %}
             <div style="font-size: 12px; color: #6b7280;">
-              (₹{{ breakdown.metal_rate | times: 0.01 | money_without_currency }}/g)
+              (₹{{ breakdown.metal_rate | money_without_currency }}/g)
             </div>
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% if breakdown.has_metal_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                {{ breakdown.metal_value_original | times: 0.01 | money }}
+                {{ breakdown.metal_value_original | money }}
               </div>
             {% endif %}
-            {{ breakdown.metal_value | times: 0.01 | money }}
+            {{ breakdown.metal_value | money }}
           </td>
         </tr>
         
@@ -50,7 +50,7 @@
             Wastage ({{ breakdown.wastage_pct }}%)
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
-            {{ breakdown.wastage_amount | times: 0.01 | money }}
+            {{ breakdown.wastage_amount | money }}
           </td>
         </tr>
         
@@ -74,10 +74,10 @@
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% if breakdown.has_making_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                {{ breakdown.making_charges_original | times: 0.01 | money }}
+                {{ breakdown.making_charges_original | money }}
               </div>
             {% endif %}
-            {{ breakdown.making_charges | times: 0.01 | money }}
+            {{ breakdown.making_charges | money }}
           </td>
         </tr>
         
@@ -116,10 +116,10 @@
                 {% else %}
                   {% if gem.hasDiscount %}
                     <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                      {{ gem.cost | times: 0.01 | money }}
+                      {{ gem.cost | money }}
                     </div>
                   {% endif %}
-                  {{ gem.finalCost | times: 0.01 | money }}
+                  {{ gem.finalCost | money }}
                 {% endif %}
               </td>
             </tr>
@@ -130,7 +130,7 @@
             <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
               <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
               <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
-                {{ breakdown.gemstone_price | times: 0.01 | money }}
+                {{ breakdown.gemstone_price | money }}
               </td>
             </tr>
           {% endif %}
@@ -168,10 +168,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_gemstone_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  {{ breakdown.gemstone_price_original | times: 0.01 | money }}
+                  {{ breakdown.gemstone_price_original | money }}
                 </div>
               {% endif %}
-              {{ breakdown.gemstone_price | times: 0.01 | money }}
+              {{ breakdown.gemstone_price | money }}
             </td>
           </tr>
         {% endif %}
@@ -193,10 +193,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_enamel_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  {{ breakdown.enamel_price_original | times: 0.01 | money }}
+                  {{ breakdown.enamel_price_original | money }}
                 </div>
               {% endif %}
-              {{ breakdown.enamel_price | times: 0.01 | money }}
+              {{ breakdown.enamel_price | money }}
             </td>
           </tr>
         {% endif %}
@@ -205,7 +205,7 @@
         <tr style="background-color: #fafbfb; border-top: 1px solid #e1e3e5;">
           <td style="padding: 8px 16px; font-weight: 600; color: #374151;">Subtotal</td>
           <td style="padding: 8px 16px; text-align: right; font-weight: 600; color: #374151;">
-            {{ breakdown.subtotal | times: 0.01 | money }}
+            {{ breakdown.subtotal | money }}
           </td>
         </tr>
         
@@ -214,7 +214,7 @@
           <td style="padding: 10px 16px; color: #374151;">GST ({{ breakdown.gst_pct }}%)</td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% assign gst_value = breakdown.gst_amount | default: 0 %}
-            {{ gst_value | times: 0.01 | money }}
+            {{ gst_value | money }}
           </td>
         </tr>
         
@@ -223,7 +223,7 @@
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #d93025;">Shop Discount</td>
             <td style="padding: 10px 16px; text-align: right; color: #d93025;">
-              -{{ breakdown.discount | times: 0.01 | money }}
+              -{{ breakdown.discount | money }}
             </td>
           </tr>
         {% endif %}
@@ -233,7 +233,7 @@
           <tr style="border-bottom: 1px solid #f1f2f3;">
             <td style="padding: 10px 16px; color: #d93025;">Product Discount</td>
             <td style="padding: 10px 16px; text-align: right; color: #d93025;">
-              -{{ breakdown.product_discount | times: 0.01 | money }}
+              -{{ breakdown.product_discount | money }}
             </td>
           </tr>
         {% endif %}
@@ -245,10 +245,10 @@
           <td style="padding: 14px 16px; text-align: right; font-weight: 700; color: #166534; font-size: 16px;">
             {% if breakdown.has_any_discount %}
               <div style="text-decoration: line-through; color: #9ca3af; font-size: 11px; font-weight: 400;">
-                {{ breakdown.total_original | times: 0.01 | money }}
+                {{ breakdown.total_original | money }}
               </div>
             {% endif %}
-            {{ breakdown.total | times: 0.01 | money }}
+            {{ breakdown.total | money }}
           </td>
         </tr>
         
