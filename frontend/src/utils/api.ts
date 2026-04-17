@@ -36,8 +36,8 @@ axiosRetry(api, {
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('gemini_auth_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
+        if (token && config.headers) {
+            config.headers.set ? config.headers.set('Authorization', `Bearer ${token}`) : (config.headers['Authorization'] = `Bearer ${token}`);
         }
         console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;

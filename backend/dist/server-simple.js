@@ -230,6 +230,11 @@ app.use(async (req, res, next) => {
         return next();
     }
     
+    // ALLOW CORS PREFLIGHT REQUESTS TO PASS THROUGH!
+    if (req.method === 'OPTIONS') {
+        return next();
+    }
+    
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
