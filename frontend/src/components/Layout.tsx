@@ -11,6 +11,8 @@ import {
 } from '@shopify/polaris-icons';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { SyncTopBar } from './SyncTopBar';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '@shopify/polaris';
 
 interface LayoutProps {
     children: ReactNode;
@@ -19,6 +21,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { logout } = useAuth();
 
     const navigationItems = [
         {
@@ -68,10 +71,9 @@ export default function Layout({ children }: LayoutProps) {
     return (
         <Frame
             topBar={
-                <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: '56px', background: '#fff', borderBottom: '1px solid #dfe3e8' }}>
-                    <div style={{ marginRight: '16px' }}>
-                        <SyncStatusIndicator />
-                    </div>
+                <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: '56px', background: '#fff', borderBottom: '1px solid #dfe3e8', gap: '16px' }}>
+                    <SyncStatusIndicator />
+                    <Button onClick={() => { logout(); navigate('/login'); }}>Log out</Button>
                 </div>
             }
             navigation={

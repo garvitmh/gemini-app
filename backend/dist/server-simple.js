@@ -52,6 +52,9 @@ const gemstoneDisplay_1 = require("./utils/gemstoneDisplay");
 const pricing_service_1 = require("./services/pricing.service");
 const context_middleware_1 = require("./middleware/context.middleware");
 const products_routes_1 = __importDefault(require("./routes/products.routes"));
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_super_secret_gemini_2026_xyz';
 const PORT = process.env.PORT || 3000;
 const prisma = new client_1.PrismaClient();
 exports.prisma = prisma;
@@ -218,7 +221,28 @@ app.post('/webhooks/app/uninstalled', verifyWebhookHmac, async (req, res) => {
 });
 // Register routes
 // Mock Shopify session for local dev before routes
-app.use('/api/*', (req, res, next) => {
+app.use(async (req, res, next) => {
+    // Only intercept paths that start with /api/
+    if (!req.path.startsWith('/api/')) return next();
+    
+    // Whitelist login, health, and status
+    if (['/api/login', '/api/health', '/api/db-status'].includes(req.path)) {
+        return next();
+    }
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded; // Attach the decoded token payload
+    } catch (err) {
+        return res.status(401).json({ error: 'Unauthorized: Token expired or invalid' });
+    }
+    
     res.locals.shopify = {
         session: {
             shop: SHOPIFY_STORE,
@@ -226,6 +250,32 @@ app.use('/api/*', (req, res, next) => {
     };
     next();
 });
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password required' });
+        }
+        
+        const user = await prisma.adminUser.findUnique({ where: { username } });
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        const valid = await bcrypt.compare(password, user.password);
+        if (!valid) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, username: user.username });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.use('/api/products', products_routes_1.default);
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 // Helper to log audit events

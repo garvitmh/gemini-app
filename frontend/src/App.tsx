@@ -12,8 +12,16 @@ import MakingGroups from './pages/MakingGroups';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { SyncProvider } from './context/SyncContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Login } from './pages/Login';
 // @ts-ignore - JSON import
 import en from '@shopify/polaris/locales/en.json';
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+    const { isAuthenticated, loading } = useAuth();
+    if (loading) return null; // Wait for initial check
+    return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
 
 /**
  * Read the 'host' query param provided by Shopify when embedded.
@@ -33,17 +41,24 @@ function App() {
     const content = (
         <SyncProvider>
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <Layout>
-                    <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/rates" element={<Rates />} />
-                        <Route path="/products" element={<Products />} />
-                        <Route path="/history" element={<History />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/making-groups" element={<MakingGroups />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                </Layout>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/*" element={
+                        <RequireAuth>
+                            <Layout>
+                                <Routes>
+                                    <Route path="/" element={<Dashboard />} />
+                                    <Route path="/rates" element={<Rates />} />
+                                    <Route path="/products" element={<Products />} />
+                                    <Route path="/history" element={<History />} />
+                                    <Route path="/settings" element={<Settings />} />
+                                    <Route path="/making-groups" element={<MakingGroups />} />
+                                    <Route path="*" element={<Navigate to="/" replace />} />
+                                </Routes>
+                            </Layout>
+                        </RequireAuth>
+                    } />
+                </Routes>
             </BrowserRouter>
             <ToastContainer
                 position="top-right"
@@ -64,15 +79,17 @@ function App() {
     return (
         <AppProvider i18n={en}>
             <ErrorBoundary>
-                {isEmbedded ? (
-                    // Embedded in Shopify Admin — use App Bridge for session tokens & navigation
-                    <AppBridgeProvider config={{ apiKey, host, forceRedirect: false }}>
-                        {content}
-                    </AppBridgeProvider>
-                ) : (
-                    // Standalone / desktop mode — skip App Bridge
-                    content
-                )}
+                <AuthProvider>
+                    {isEmbedded ? (
+                        // Embedded in Shopify Admin — use App Bridge for session tokens & navigation
+                        <AppBridgeProvider config={{ apiKey, host, forceRedirect: false }}>
+                            {content}
+                        </AppBridgeProvider>
+                    ) : (
+                        // Standalone / desktop mode — skip App Bridge
+                        content
+                    )}
+                </AuthProvider>
             </ErrorBoundary>
         </AppProvider>
     );

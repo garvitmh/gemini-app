@@ -304,3 +304,11 @@ model Job {
   @@index([shopId, status])
   @@index([createdAt])
 }
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
