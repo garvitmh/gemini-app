@@ -1,0 +1,62 @@
+ID: cmjwtpdac00cstubhbwp5s4iv | ShopifyID: gid://shopify/Product/7644647981146 | VariantID: gid://shopify/ProductVariant/42486112878682 | SKU: SRJ-LR-3920
+ID: cmjwtpdvt00cutubhs52xzgq6 | ShopifyID: gid://shopify/Product/7644648013914 | VariantID: gid://shopify/ProductVariant/42486112911450 | SKU: SRJ-LR-2724
+ID: cmjwtpef100cwtubhw45812mt | ShopifyID: gid://shopify/Product/7644648046682 | VariantID: gid://shopify/ProductVariant/42486112944218 | SKU: SRJ-LR-3425
+ID: cmjwtpf0g00cytubhniuawe7o | ShopifyID: gid://shopify/Product/7644648079450 | VariantID: gid://shopify/ProductVariant/42486112976986 | SKU: SRJ-LR-3874
+ID: cmjwtpflu00d0tubhuftklqct | ShopifyID: gid://shopify/Product/7644648112218 | VariantID: gid://shopify/ProductVariant/42486113009754 | SKU: SRJ-RL-3489
+ID: cmjwtpg9z00d2tubh6d40gk1m | ShopifyID: gid://shopify/Product/7644648144986 | VariantID: gid://shopify/ProductVariant/42486113042522 | SKU: SRJ-LR-3898
+ID: cmjwtpgqe00d4tubhggmxr0r6 | ShopifyID: gid://shopify/Product/7644648177754 | VariantID: gid://shopify/ProductVariant/42486113075290 | SKU: SRJ-LR-3517
+ID: cmjwtpha900d6tubhfppkkqyt | ShopifyID: gid://shopify/Product/7644648210522 | VariantID: gid://shopify/ProductVariant/42486113108058 | SKU: SRJ-LR-3500
+ID: cmjwtphtu00d8tubh6xoud2ak | ShopifyID: gid://shopify/Product/7644648243290 | VariantID: gid://shopify/ProductVariant/42486113140826 | SKU: SRJ-RL-3883
+ID: cmjwtpie700datubh2mnlgw82 | ShopifyID: gid://shopify/Product/7644648276058 | VariantID: gid://shopify/ProductVariant/42486113173594 | SKU: SRJ-RL-3740
+ID: cmjwtpixi00dctubhbm8vk40s | ShopifyID: gid://shopify/Product/7644648308826 | VariantID: gid://shopify/ProductVariant/42486113206362 | SKU: SRJ-RL-3428
+ID: cmjwtpjj400detubhta57vy7m | ShopifyID: gid://shopify/Product/7644648341594 | VariantID: gid://shopify/ProductVariant/42486113239130 | SKU: SRJ-RL-3134
+ID: cmjwtpk4800dgtubhll9mpv2k | ShopifyID: gid://shopify/Product/7644648374362 | VariantID: gid://shopify/ProductVariant/42486113271898 | SKU: SRJ-RL-3425
+ID: cmjwtpkw500ditubh9i7700rl | ShopifyID: gid://shopify/Product/7644648407130 | VariantID: gid://shopify/ProductVariant/42486113304666 | SKU: SRJ-LR-3511
+ID: cmjwtplfq00dktubhtedpsacr | ShopifyID: gid://shopify/Product/7644648439898 | VariantID: gid://shopify/ProductVariant/42486113337434 | SKU: SRJ-LR-3696
+ID: cmjwtpm0f00dmtubhuzaylcli | ShopifyID: gid://shopify/Product/7644648472666 | VariantID: gid://shopify/ProductVariant/42486113370202 | SKU: SRJ-LR-3508
+ID: cmjwtpmli00dotubh8dr5mgb5 | ShopifyID: gid://shopify/Product/7644648505434 | VariantID: gid://shopify/ProductVariant/42486113402970 | SKU: SRJ-LR-3516
+ID: cmjwtpn6h00dqtubhcrzegrz8 | ShopifyID: gid://shopify/Product/7644648538202 | VariantID: gid://shopify/ProductVariant/42486113435738 | SKU: SRJ-RL-3484
+ID: cmjwtpnq200dstubh38w98n22 | ShopifyID: gid://shopify/Product/7644648570970 | VariantID: gid://shopify/ProductVariant/42486113468506 | SKU: SRJ-RL-3514
+ID: cmjwtpoak00dutubhddzvjreg | ShopifyID: gid://shopify/Product/7644648603738 | VariantID: gid://shopify/ProductVariant/42486113501274 | SKU: SRJ-LR-3476
+ID: cmjwtpp3x00dwtubhtu6vylrn | ShopifyID: gid://shopify/Product/7644648636506 | VariantID: gid://shopify/ProductVariant/42499628138586 | SKU: SRJ-LR-3137
+ID: cmjwtppog00dytubhx7hksk8l | ShopifyID: gid://shopify/Product/7644648669274 | VariantID: gid://shopify/ProductVariant/42486113566810 | SKU: R-LR-0004
+ID: cmjwtpq9c00e0tubhe75cu7u3 | ShopifyID: gid://shopify/Product/7644648702042 | VariantID: gid://shopify/ProductVariant/42486113599578 | SKU: SRJ-LR-2690
+ID: cmjwtpqun00e2tubhukvv032e | ShopifyID: gid://shopify/Product/7644648734810 | VariantID: gid://shopify/ProductVariant/42486113632346 | SKU: SRJ-RL-2728
+ID: cmjwtprhe00e4tubhlpl0gl0g | ShopifyID: gid://shopify/Product/7644648767578 | VariantID: gid://shopify/ProductVariant/42486113665114 | SKU: SRJ-LR-2754
+ID: cmjwtps1100e6tubh10jme8rp | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42486113697882 | SKU: SRJ-LR-3705
+ID: cmjwtpslj00e8tubhswe1uliw | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42717043490906 | SKU: null
+ID: cmjwtpt5u00eatubha82qgqa1 | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42717043523674 | SKU: null
+ID: cmjwtptqt00ectubh5i1llf29 | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42717043556442 | SKU: null
+ID: cmjwtpube00eetubh8z1cnejn | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42717043916890 | SKU: null
+ID: cmjwtpuvo00egtubhgedrgu7l | ShopifyID: gid://shopify/Product/7644648800346 | VariantID: gid://shopify/ProductVariant/42717043949658 | SKU: null
+ID: cmkl3fmyd000479hjxczdrdjd | ShopifyID: gid://shopify/Product/7745632370778 | VariantID: gid://shopify/ProductVariant/42789371641946 | SKU: SRJ-LR-3500
+ID: cmkl3fn1p000679hj5vqw26p0 | ShopifyID: gid://shopify/Product/7745632174170 | VariantID: gid://shopify/ProductVariant/42789371445338 | SKU: SRJ-LR-2724
+ID: cmkl3fn2z000879hjhecsu5yp | ShopifyID: gid://shopify/Product/7745632927834 | VariantID: gid://shopify/ProductVariant/42789372231770 | SKU: SRJ-LR-2690
+ID: cmkl3fn48000a79hjci4lyza9 | ShopifyID: gid://shopify/Product/7745632206938 | VariantID: gid://shopify/ProductVariant/42789371478106 | SKU: SRJ-LR-3425
+ID: cmkl3fn7g000c79hjb7vv0kdc | ShopifyID: gid://shopify/Product/7745632338010 | VariantID: gid://shopify/ProductVariant/42789371609178 | SKU: SRJ-LR-3517
+ID: cmkl3fn8d000e79hje1ejk2pw | ShopifyID: gid://shopify/Product/7745632895066 | VariantID: gid://shopify/ProductVariant/42789372166234 | SKU: SRJ-LR-2754
+ID: cmkl3fn9n000g79hjp7ja01gm | ShopifyID: gid://shopify/Product/7745632272474 | VariantID: gid://shopify/ProductVariant/42789371543642 | SKU: SRJ-RL-3489
+ID: cmkl3fnan000i79hj3wyrvep0 | ShopifyID: gid://shopify/Product/7745632731226 | VariantID: gid://shopify/ProductVariant/42789372002394 | SKU: R-LR-0004
+ID: cmkl3fnbm000k79hjo5vagk5d | ShopifyID: gid://shopify/Product/7745632403546 | VariantID: gid://shopify/ProductVariant/42789371674714 | SKU: SRJ-RL-3428
+ID: cmkl3fncw000m79hjdrv860rd | ShopifyID: gid://shopify/Product/7745632534618 | VariantID: gid://shopify/ProductVariant/42789371805786 | SKU: SRJ-RL-3425
+ID: cmkl3fndv000o79hjjgalpwg3 | ShopifyID: gid://shopify/Product/7745632469082 | VariantID: gid://shopify/ProductVariant/42789371740250 | SKU: SRJ-RL-3134
+ID: cmkl3fneu000q79hjoyuszp1d | ShopifyID: gid://shopify/Product/7745632763994 | VariantID: gid://shopify/ProductVariant/42789372035162 | SKU: SRJ-LR-3137
+ID: cmkl3fnh3000s79hjwntqe5kq | ShopifyID: gid://shopify/Product/7745632501850 | VariantID: gid://shopify/ProductVariant/42789371773018 | SKU: SRJ-RL-3883
+ID: cmkl3fnhz000u79hjjvoyvi1l | ShopifyID: gid://shopify/Product/7745632141402 | VariantID: gid://shopify/ProductVariant/42789371412570 | SKU: SRJ-LR-3920
+ID: cmkl3fnk5000w79hjkbgakhe7 | ShopifyID: gid://shopify/Product/7745632862298 | VariantID: gid://shopify/ProductVariant/42789372133466 | SKU: SRJ-RL-2728
+ID: cmkl3fnl8000y79hj4tcovuwh | ShopifyID: gid://shopify/Product/7745632796762 | VariantID: gid://shopify/ProductVariant/42789372067930 | SKU: SRJ-RL-3514
+ID: cmkl3fnm7001079hj7pt4d6t8 | ShopifyID: gid://shopify/Product/7745632993370 | VariantID: gid://shopify/ProductVariant/42789372395610 | SKU: SRJ-LR-3705
+ID: cmkl3fnn8001279hjtn5flc6c | ShopifyID: gid://shopify/Product/7745632239706 | VariantID: gid://shopify/ProductVariant/42789371510874 | SKU: SRJ-LR-3874
+ID: cmkl3fno4001479hj63tzin4v | ShopifyID: gid://shopify/Product/7745632632922 | VariantID: gid://shopify/ProductVariant/42789371904090 | SKU: SRJ-LR-3516
+ID: cmkl3fnp2001679hjuzjmka04 | ShopifyID: gid://shopify/Product/7745632567386 | VariantID: gid://shopify/ProductVariant/42789371838554 | SKU: SRJ-LR-3511
+ID: cmkl3fnq1001879hj2s9gtydu | ShopifyID: gid://shopify/Product/7745632698458 | VariantID: gid://shopify/ProductVariant/42789371969626 | SKU: SRJ-LR-3508
+ID: cmkl3fnrm001a79hjw9drid8j | ShopifyID: gid://shopify/Product/7745632436314 | VariantID: gid://shopify/ProductVariant/42789371707482 | SKU: SRJ-RL-3740
+ID: cmkl3fnsk001c79hjpbqkcxfh | ShopifyID: gid://shopify/Product/7745632829530 | VariantID: gid://shopify/ProductVariant/42789372100698 | SKU: SRJ-LR-3476
+ID: cmkl3fntl001e79hj6qbx94e7 | ShopifyID: gid://shopify/Product/7745632305242 | VariantID: gid://shopify/ProductVariant/42789371576410 | SKU: SRJ-LR-3898
+ID: cmkl3fnv9001g79hjzly52eo1 | ShopifyID: gid://shopify/Product/7745632665690 | VariantID: gid://shopify/ProductVariant/42789371936858 | SKU: SRJ-RL-3484
+ID: cmkl3fnw4001i79hj6jrz9owe | ShopifyID: gid://shopify/Product/7745632600154 | VariantID: gid://shopify/ProductVariant/42789371871322 | SKU: SRJ-LR-3696
+
+Analysis:
+- Total Records: 57
+- Unique Shopify Product IDs: 52
+CONCLUSION: Mixed bag. Some share IDs, some do not.

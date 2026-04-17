@@ -1,0 +1,13 @@
+﻿--- Verification of Pricing Math Fix ---
+
+--- Test 1: Auto Gross Weight (1ct=0.2g) ---
+Input: 10g Gold, 5ct Stones
+Calculated Weight: 11g
+Calculated Price: Ôé╣11000
+Ô£à SUCCESS: 1ct = 0.2g conversion confirmed.
+
+--- Test 2: Manual Gross Weight (Ignore Stones in gross) ---
+Input: 15g manual gross weight, 10ct stones at Ôé╣100/ct
+Calculated Weight: 15g
+Calculated Price: Ôé╣16000
+Ô£à SUCCESS: Manual gross weight and custom gemstone cost confirmed.

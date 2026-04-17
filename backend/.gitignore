@@ -1,5 +1,12 @@
 node_modules/
 dist/
 .env
+.env.production
+.env.local
 *.log
+forensic_diagnostic.log
 .DS_Store
+Thumbs.db
+*.db
+*.db-journal
+prisma/dev.db

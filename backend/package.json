@@ -4,9 +4,10 @@
     "description": "Shopify App for managing live metal and gem prices for jewelry stores",
     "main": "dist/server.js",
     "scripts": {
-        "dev": "nodemon src/server-simple.ts",
+        "dev": "nodemon dist/server-simple.js",
         "build": "tsc",
-        "start": "node dist/server.js",
+        "start": "node dist/server-simple.js",
+        "start:prod": "NODE_ENV=production node dist/server-simple.js",
         "db:generate": "prisma generate",
         "db:push": "prisma db push",
         "db:migrate": "prisma migrate dev",

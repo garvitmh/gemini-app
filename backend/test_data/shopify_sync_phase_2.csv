@@ -1,4 +1,0 @@
-Handle,Title,Body (HTML),Vendor,Standard Product Type,Custom Product Type,Tags,Published,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Compare At Price,Variant Requires Shipping,Variant Taxable,Image Src
-test-sync-ring,Test Sync Ring,<p>Test product for sync verification</p>,Test Vendor,Jewelry,Ring,"sync,test",TRUE,Material,Gold,Size,6,,,TEST-RING-GOLD-6,5.0,shopify,100,deny,manual,15000,,TRUE,TRUE,
-test-sync-ring,,,,,,,,Material,Gold,Size,7,,,TEST-RING-GOLD-7,5.5,shopify,100,deny,manual,10500,,TRUE,TRUE,
-test-sync-ring,,,,,,,,Material,Silver,Size,6,,,TEST-RING-SILVER-6,4.0,shopify,50,deny,manual,5000,,TRUE,TRUE,

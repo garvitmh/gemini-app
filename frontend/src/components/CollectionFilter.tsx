@@ -55,7 +55,6 @@ export default function CollectionFilter({ selectedCollectionId, onCollectionCha
                 value={selectedCollectionId}
                 onChange={onCollectionChange}
                 disabled={disabled || loading}
-                placeholder="Filter by collection"
             />
         </div>
     );

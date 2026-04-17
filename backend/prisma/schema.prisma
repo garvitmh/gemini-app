@@ -148,7 +148,7 @@ model ProductGemstone {
   gemstoneType       String
   naturalOrLabgrown  String?
   quality            String?
-  shape             String?
+  shape              String?
   gemstoneCut        String?
   gemstoneColor      String?
   gemstoneClarity    String?
@@ -160,6 +160,8 @@ model ProductGemstone {
   discountValue      Float?
   isCustom           Boolean  @default(false)
   pricePerPiece      Float?
+  pricePerCarat      Float?
+  totalPrice         Float?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -168,70 +170,69 @@ model ProductGemstone {
 }
 
 model Product {
-  id                    String            @id @default(cuid())
-  shopId                String
-  shopifyProductId      String
-  shopifyVariantId      String            @unique
-  sku                   String?
-  title                 String
-  variantTitle          String?
-  imageUrl              String?
-  status                String?
-  weightGrams           Float?
-  metal                 String?
-  karat                 Int?
-  stoneWeightCarat      Float?
-  stoneType             String?
-  stonePieces           Int?
-  gemstoneType          String?
-  gemstoneCut           String?
-  gemstoneColor         String?
-  gemstoneClarity       String?
-  gemstoneCaratRange    String?
-  isManualGemstonePrice Boolean           @default(false)
-  manualGemstoneWeight  Float?
-  manualGemstonePrice   Float?
-  discount              Float?
-  discountType          String?           @default("flat")
-  useCustomFormula      Boolean           @default(false)
-
-  customFormula         String?
-  makingChargeFlat      Float?
-  makingChargePct       Float?
-  wastagePct            Float?
-  gstPct                Float?
-  currentPrice          Float?
-  lastCalculatedPrice   Float?
-  lastPushedPrice       Float?
-  lastPushedAt          DateTime?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  enamelColor           String?
-  enamelDiscountType    String?
-  enamelDiscountValue   Float?
-  enamelWeightGrams     Float?
-  gemstoneDiscountType  String?
-  gemstoneDiscountValue Float?
-  makingChargeType      String?
-  makingChargeValue     Float?
-  makingDiscountType    String?
-  makingDiscountValue   Float?
-  metalDiscountType     String?
-  metalDiscountValue    Float?
-  gemstoneQuality       String?
-  gemstoneShape         String?
-  naturalOrLabgrown     String?
+  id                            String            @id @default(cuid())
+  shopId                        String
+  shopifyProductId              String
+  shopifyVariantId              String            @unique
+  sku                           String?
+  title                         String
+  variantTitle                  String?
+  imageUrl                      String?
+  status                        String?
+  weightGrams                   Float?
+  metal                         String?
+  karat                         Int?
+  stoneWeightCarat              Float?
+  stoneType                     String?
+  stonePieces                   Int?
+  gemstoneType                  String?
+  gemstoneCut                   String?
+  gemstoneColor                 String?
+  gemstoneClarity               String?
+  gemstoneCaratRange            String?
+  isManualGemstonePrice         Boolean           @default(false)
+  manualGemstoneWeight          Float?
+  manualGemstonePrice           Float?
+  discount                      Float?
+  discountType                  String?           @default("flat")
+  useCustomFormula              Boolean           @default(false)
+  customFormula                 String?
+  makingChargeFlat              Float?
+  makingChargePct               Float?
+  wastagePct                    Float?
+  gstPct                        Float?
+  currentPrice                  Float?
+  lastCalculatedPrice           Float?
+  lastPushedPrice               Float?
+  lastPushedAt                  DateTime?
+  createdAt                     DateTime          @default(now())
+  updatedAt                     DateTime          @updatedAt
+  enamelColor                   String?
+  enamelDiscountType            String?
+  enamelDiscountValue           Float?
+  enamelWeightGrams             Float?
+  gemstoneDiscountType          String?
+  gemstoneDiscountValue         Float?
+  makingChargeType              String?
+  makingChargeValue             Float?
+  makingDiscountType            String?
+  makingDiscountValue           Float?
+  metalDiscountType             String?
+  metalDiscountValue            Float?
+  gemstoneQuality               String?
+  gemstoneShape                 String?
+  naturalOrLabgrown             String?
   gemstoneOverridePricePerPiece Float?
-  gemstoneOverridePieces       Int?
-  gemstoneOverrideColor        String?
-  grossGoldWeight              Float?
-  autoGrossGoldWeight          Boolean           @default(false)
-  makingGroupId                String?
-  priceBreakdownHtml    String?
-  priceHistory          PriceHistory[]
-  shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  makingGroup           MakingGroup?      @relation(fields: [makingGroupId], references: [id], onDelete: SetNull)
-  gemstones             ProductGemstone[]
+  gemstoneOverridePieces        Int?
+  gemstoneOverrideColor         String?
+  grossGoldWeight               Float?
+  autoGrossGoldWeight           Boolean           @default(false)
+  makingGroupId                 String?
+  priceBreakdownHtml            String?
+  priceHistory                  PriceHistory[]
+  makingGroup                   MakingGroup?      @relation(fields: [makingGroupId], references: [id])
+  shop                          Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  gemstones                     ProductGemstone[]
 
   @@index([shopId, shopifyProductId])
   @@index([shopId, sku])

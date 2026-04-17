@@ -10,6 +10,7 @@ import {
     CollectionIcon,
 } from '@shopify/polaris-icons';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
+import { SyncTopBar } from './SyncTopBar';
 
 interface LayoutProps {
     children: ReactNode;
@@ -79,6 +80,7 @@ export default function Layout({ children }: LayoutProps) {
                 </Navigation>
             }
         >
+            <SyncTopBar />
             {children}
         </Frame>
     );

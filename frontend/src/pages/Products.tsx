@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Page,
     Layout,
@@ -20,11 +20,12 @@ import {
     Pagination,
     Checkbox,
 } from '@shopify/polaris';
-import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon } from '@shopify/polaris-icons';
+import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon, UploadIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
 import { useDebounce } from '../utils/useDebounce';
 import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
 import CollectionFilter from '../components/CollectionFilter';
+import { useSync } from '../context/SyncContext';
 
 interface ProductGemstone {
     id?: string;
@@ -96,6 +97,8 @@ interface Product {
 
     makingGroupId?: string | null;
     makingGroup?: { name: string } | null;
+    wastagePct?: number;
+    gstPct?: number;
 }
 
 interface MakingGroup {
@@ -175,7 +178,8 @@ export default function Products() {
     // Reset pagination when filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [statusFilter, collectionId]);
+        setExpandedGroupId(null); // Reset expanded group
+    }, [statusFilter, collectionId, searchQuery]);
 
     const toggleGroup = (baseName: string) => {
         setExpandedGroupId(prev => prev === baseName ? null : baseName);
@@ -246,6 +250,8 @@ export default function Products() {
 
 
     const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
+    const [editWastagePct, setEditWastagePct] = useState<number | null>(null);
+    const [editGstPct, setEditGstPct] = useState<number | null>(null);
 
     const [editIsManualGemstonePrice, setEditIsManualGemstonePrice] = useState(false);
     const [editManualGemstoneWeight, setEditManualGemstoneWeight] = useState('');
@@ -260,11 +266,81 @@ export default function Products() {
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importResult, setImportResult] = useState<{ updatedCount: number, errors: any[] } | null>(null);
 
+    // Selected products for bulk actions
+    const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+    const [pushingBreakdown, setPushingBreakdown] = useState(false);
+
+    // Handler for pushing price breakdowns to Shopify
+    const handlePushBreakdown = async () => {
+        if (selectedProducts.length === 0) {
+            setError('Please select at least one product');
+            setTimeout(() => setError(''), 3000);
+            return;
+        }
+
+        setPushingBreakdown(true);
+        setError('');
+        setSuccessMessage('');
+
+        try {
+            const response = await api.post('/products/push-breakdown', {
+                productIds: selectedProducts
+            });
+
+            if (response.data.success) {
+                setSuccessMessage(`✓ Pushed ${response.data.successCount} products to Shopify!`);
+                setSelectedProducts([]); // Clear selection
+                await fetchProducts(); // Refresh to show updated lastPushedAt
+                setTimeout(() => setSuccessMessage(''), 5000);
+            } else {
+                setError('Failed to push price breakdowns');
+            }
+        } catch (err: any) {
+            console.error('Error pushing breakdowns:', err);
+            const msg = err.response?.data?.error || err.message || 'Unknown error';
+            setError(`Push failed: ${msg}`);
+        } finally {
+            setPushingBreakdown(false);
+        }
+    };
+
+    // Handler for pushing single product to Shopify
+    const handlePushSingleProduct = async (productId: string, sku: string) => {
+        setError('');
+        setSuccessMessage('');
+
+        try {
+            const response = await api.post('/products/push-breakdown', {
+                productIds: [productId]
+            });
+
+            if (response.data.success && response.data.successCount > 0) {
+                setSuccessMessage(`✓ Pushed ${sku} to Shopify!`);
+                await fetchProducts(); // Refresh to show updated lastPushedAt
+                setTimeout(() => setSuccessMessage(''), 3000);
+            } else {
+                setError(`Failed to push ${sku}`);
+                setTimeout(() => setError(''), 3000);
+            }
+        } catch (err: any) {
+            console.error('Error pushing product:', err);
+            const msg = err.response?.data?.error || err.message || 'Unknown error';
+            setError(`Push failed for ${sku}: ${msg}`);
+            setTimeout(() => setError(''), 3000);
+        }
+    };
+
+
+
     useEffect(() => {
+        setExpandedGroupId(null); // Reset expanded group on page change
         fetchProducts();
+    }, [debouncedSearch, currentPage, collectionId, statusFilter]);
+
+    useEffect(() => {
         fetchAllGemstoneRates();
         fetchMakingGroups();
-    }, [debouncedSearch, currentPage, collectionId]);
+    }, []);
 
     const fetchMakingGroups = async () => {
         try {
@@ -414,7 +490,8 @@ export default function Products() {
                     page: currentPage,
                     limit: ITEMS_PER_PAGE,
                     search: debouncedSearch,
-                    collectionId: collectionId || undefined
+                    collectionId: collectionId || undefined,
+                    status: statusFilter !== 'all' ? statusFilter : undefined
                 },
             });
 
@@ -493,9 +570,13 @@ export default function Products() {
                 enamelDiscountValue: product.enamelDiscountValue,
                 discount: product.discount,
                 discountType: product.discountType,
-                gemstoneOverridePricePerPiece: product.gemstoneOverridePricePerPiece,
+                wastagePct: product.wastagePct,
+                gstPct: product.gstPct,
+                makingGroupId: product.makingGroupId,
                 gemstoneOverridePieces: product.gemstoneOverridePieces,
                 gemstoneOverrideColor: product.gemstoneOverrideColor,
+                grossGoldWeight: product.grossGoldWeight,
+                autoGrossGoldWeight: product.autoGrossGoldWeight,
                 gemstones: gemstonesToSend,
             });
 
@@ -671,16 +752,18 @@ export default function Products() {
         setTimeout(() => recalculatePriceBreakdown(), 100);
     };
 
-    const handleSyncProducts = async () => {
-        // Sync is now handled in background with status in Top Bar
-        try {
-            await api.post('/products/sync');
-            setSuccessMessage('Sync started. Check progress in top bar.');
-            setTimeout(() => setSuccessMessage(''), 5000);
-        } catch (error) {
-            console.error('Error syncing products:', error);
-            setError('Failed to start sync.');
+    const { triggerSync, syncStatus } = useSync();
+
+    // Auto-refresh products on sync success
+    useEffect(() => {
+        if (syncStatus === 'success') {
+            fetchProducts();
         }
+    }, [syncStatus]);
+
+    const handleSyncProducts = async () => {
+        // Trigger global sync context action
+        await triggerSync();
     };
 
 
@@ -705,11 +788,13 @@ export default function Products() {
         setEditIsManualGemstonePrice(product.isManualGemstonePrice || false);
         setEditManualGemstoneWeight(product.manualGemstoneWeight?.toString() || '');
         setEditManualGemstonePrice(product.manualGemstonePrice?.toString() || '');
-
-
-        setEditGrossGoldWeight(product.grossGoldWeight?.toString() || '');
+        setEditGrossGoldWeight(product.grossGoldWeight || 0);
         setEditAutoGrossGoldWeight(product.autoGrossGoldWeight || false);
-
+        setEditWastagePct(product.wastagePct !== undefined ? product.wastagePct : null);
+        setEditGstPct(product.gstPct !== undefined ? product.gstPct : null);
+        
+        // Load gemstones
+        setProductGemstones(product.gemstones || []);
         setEditMetalDiscountType(product.metalDiscountType || 'none');
         setEditMetalDiscountValue(product.metalDiscountValue?.toString() || '');
         setEditMakingDiscountType(product.makingDiscountType || 'none');
@@ -779,6 +864,10 @@ export default function Products() {
                     gemstoneWeight: g.gemstoneWeight ? parseFloat(g.gemstoneWeight.toString()) : null,
                     discountValue: g.discountValue ? parseFloat(g.discountValue.toString()) : null,
                 })),
+                grossGoldWeight: editGrossGoldWeight ? parseFloat(editGrossGoldWeight.toString()) : null,
+                autoGrossGoldWeight: editAutoGrossGoldWeight,
+                wastagePct: editWastagePct,
+                gstPct: editGstPct,
             });
             setSuccessMessage('Product updated successfully!');
             // Modal stays open as requested by user
@@ -790,6 +879,22 @@ export default function Products() {
             const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Unknown error';
             setError(`Update failed: ${msg}`);
             setSuccessMessage('');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteProduct = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this product?')) return;
+        setLoading(true);
+        try {
+            await api.delete(`/products/${id}`);
+            setSuccessMessage('Product deleted successfully');
+            fetchProducts();
+            setTimeout(() => setSuccessMessage(''), 3000);
+        } catch (error: any) {
+            console.error('Error deleting product:', error);
+            setError(error.response?.data?.error || 'Failed to delete product. Delete route might not be implemented.');
         } finally {
             setLoading(false);
         }
@@ -808,36 +913,50 @@ export default function Products() {
         setImportResult(null);
 
         try {
-            const formData = new FormData();
-            formData.append('file', importFile);
+            // Helper to read file as base64
+            const reader = new FileReader();
+            const filePromise = new Promise((resolve, reject) => {
+                reader.onload = () => {
+                    const base64 = (reader.result as string).split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+            });
+            reader.readAsDataURL(importFile);
 
-            // Send as multipart/form-data
-            const response = await api.post('/products/import', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+            const fileData = await filePromise;
+            const fileType = importFile.name.endsWith('.csv') ? 'csv' : 'xlsx';
+
+            const response = await api.post('/products/import', {
+                fileData,
+                fileType
             });
 
             if (response.data.success) {
                 setImportResult({
-                    updatedCount: response.data.updatedCount,
-                    errors: response.data.errors || []
+                    updatedCount: response.data.imported || 0,
+                    errors: response.data.details?.errors || []
                 });
-                setSuccessMessage(`Imported ${response.data.updatedCount} products successfully!`);
+
+                if (response.data.errors > 0) {
+                    setSuccessMessage(`Import processed: ${response.data.imported} success, ${response.data.errors} failed.`);
+                } else {
+                    setSuccessMessage(`Imported ${response.data.imported} products successfully!`);
+                }
                 fetchProducts();
             } else {
                 setImportResult({
                     updatedCount: 0,
-                    errors: [{ sku: 'ERROR', error: response.data.error?.message || 'Import failed' }]
+                    errors: [{ sku: 'ERROR', error: response.data.error || 'Import failed' }]
                 });
             }
         } catch (error: any) {
             console.error('Import error:', error);
-            const errorMsg = error.response?.data?.error?.message || error.userMessage || 'Import failed';
+            const errorMsg = error.response?.data?.error || error.message || 'Import failed';
             setSuccessMessage(errorMsg);
             setImportResult({
                 updatedCount: 0,
-                errors: [{ sku: 'MASTER_FAIL', error: errorMsg }]
+                errors: [{ sku: 'FAIL', error: errorMsg }]
             });
         } finally {
             setLoading(false);
@@ -920,6 +1039,10 @@ export default function Products() {
                     enamelDiscountValue: editEnamelDiscountValue ? parseFloat(editEnamelDiscountValue) : null,
                     discount: editDiscount ? parseFloat(editDiscount) : 0,
                     discountType: editDiscountType,
+                    grossGoldWeight: editGrossGoldWeight,
+                    autoGrossGoldWeight: editAutoGrossGoldWeight,
+                    wastagePct: editWastagePct,
+                    gstPct: editGstPct,
                     gemstones: productGemstones.map(g => ({
                         ...g,
                         discountValue: g.discountValue ? parseFloat(g.discountValue.toString()) : null,
@@ -956,8 +1079,9 @@ export default function Products() {
         editGemstoneDiscountType, editGemstoneDiscountValue,
         editEnamelColor, editEnamelWeightGrams, editEnamelDiscountType, editEnamelDiscountValue,
         editDiscount, editDiscountType,
-        editDiscount, editDiscountType,
-        productGemstones, editMakingGroupId
+        productGemstones, editMakingGroupId,
+        editGrossGoldWeight, editAutoGrossGoldWeight,
+        editWastagePct, editGstPct
     ]);
 
 
@@ -966,67 +1090,74 @@ export default function Products() {
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
             currency: 'INR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         }).format(amount);
     };
 
     // Grouping Helper
     // Grouping Helper (Canonical Rule: No Orphans)
     // Grouping Helper (Canonical Rule: Group by Shopify Product ID)
-    const getGroupedRows = () => {
+    const groupedInfo = useMemo(() => {
         // Map<shopifyProductId, Product[]>
         const groups = new Map<string, Product[]>();
 
-        const filteredProducts = products.filter(product => {
-            if (statusFilter === 'all') return true;
-            return product.status?.toLowerCase() === statusFilter;
-        });
-
-        filteredProducts.forEach(product => {
-            // Use shopifyProductId as the canonical group key
-            // This ensures separate Shopify Products with identical titles are NOT merged
+        products.forEach(product => {
             const key = product.shopifyProductId || product.title;
-
             if (!groups.has(key)) {
                 groups.set(key, []);
             }
             groups.get(key)?.push(product);
         });
 
-        // FULL VISIBILITY: Render all groups found
         const visibleGroups = Array.from(groups.entries());
-
-        // PAGINATION SLICING
         const totalGroups = visibleGroups.length;
-        // totalPages calculated but unused currently
-        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        const endIndex = startIndex + ITEMS_PER_PAGE;
-        const paginatedGroups = visibleGroups.slice(startIndex, endIndex);
 
-        // VALIDATION LOGGING
-        if (products.length > 0) {
-            console.debug('--- GROUPING DEBUG INFO (FIXED) ---');
-            console.debug('Total products (Variants):', products.length);
-            console.debug('Total unique Shopify Groups:', groups.size);
-        }
+        // Backend already handles pagination and filtering.
+        const paginatedGroups = visibleGroups;
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
 
         const displayRows: any[] = [];
 
         paginatedGroups.forEach(([groupId, groupProducts], index) => {
-            // Calculate global index for # column
             const globalIndex = startIndex + index + 1;
-            // Representative is first product (usually main variant)
             const representative = groupProducts[0];
             const baseName = representative.title.trim() || 'Untitled Product';
-
-            // Use groupId (shopifyProductId) for expansion state
             const isExpanded = expandedGroupId === groupId;
 
+            // Check if all variants in this group are selected
+            const allVariantsSelected = groupProducts.every(p => selectedProducts.includes(p.id));
+
             displayRows.push([
+                <Checkbox
+                    label=""
+                    checked={allVariantsSelected}
+                    onChange={(checked) => {
+                        if (checked) {
+                            // Select all variants in this group
+                            const newSelected = [...selectedProducts];
+                            groupProducts.forEach(p => {
+                                if (!newSelected.includes(p.id)) {
+                                    newSelected.push(p.id);
+                                }
+                            });
+                            setSelectedProducts(newSelected);
+                        } else {
+                            // Deselect all variants in this group
+                            const variantIds = groupProducts.map(p => p.id);
+                            setSelectedProducts(selectedProducts.filter(id => !variantIds.includes(id)));
+                        }
+                    }}
+                />,
                 globalIndex.toString(),
-                <div style={{
-                    padding: '8px 0',
-                    minWidth: '280px',
-                }}>
+                <Thumbnail
+                    source={representative.imageUrl || 'https://via.placeholder.com/50'}
+                    alt={baseName}
+                    size="small"
+                />,
+                '',
+                '',
+                <div key={groupId} style={{ padding: '8px 0', minWidth: '280px' }}>
                     <Button
                         plain
                         onClick={() => toggleGroup(groupId)}
@@ -1042,41 +1173,69 @@ export default function Products() {
                         </InlineStack>
                     </Button>
                 </div>,
-                '', // Status
-                '', // SKU
-                '', // Title (merged into first cell visual)
-                '', // Metal
-                '', // Karat
-                '', // Weight
-                '', // Gemstone
-                '', // Price
-                ''  // Edit
+                '', '', '', '', '', '',
             ]);
 
-            // Render Children only if expanded
             if (isExpanded) {
-                groupProducts.forEach((product) => {
-                    displayRows.push(['', ...renderProductRow(product, true)]);
+                groupProducts.forEach((variant) => {
+                    const isSelected = selectedProducts.includes(variant.id);
+                    displayRows.push([
+                        <Checkbox
+                            label=""
+                            checked={isSelected}
+                            onChange={(checked) => {
+                                if (checked) {
+                                    setSelectedProducts([...selectedProducts, variant.id]);
+                                } else {
+                                    setSelectedProducts(selectedProducts.filter(id => id !== variant.id));
+                                }
+                            }}
+                        />,
+                        '',
+                        '',
+                        <div key={variant.id}>
+                            <Badge tone={variant.status === 'active' ? 'success' : 'attention'}>
+                                {variant.status?.toUpperCase()}
+                            </Badge>
+                        </div>,
+                        <Text as="span" variant="bodyMd" tone="subdued">{variant.sku}</Text>,
+                        <Text as="span" variant="bodyMd">{variant.variantTitle || 'Default Title'}</Text>,
+                        variant.metal || '-',
+                        variant.karat ? `${variant.karat}K` : '-',
+                        variant.weightGrams ? `${variant.weightGrams}g` : '-',
+                        variant.gemstoneType || (variant.gemstones && variant.gemstones.length > 0 ? variant.gemstones[0].gemstoneType : '-'),
+                        formatCurrency(variant.currentPrice || 0),
+                        <InlineStack gap="200">
+                            <Button
+                                icon={UploadIcon}
+                                onClick={() => handlePushSingleProduct(variant.id, variant.sku)}
+                                accessibilityLabel="Push to Shopify"
+                            />
+                            <Button icon={EditIcon} onClick={() => handleEditProduct(variant)} />
+                            <Button tone="critical" icon={DeleteIcon} onClick={() => handleDeleteProduct(variant.id)} />
+                        </InlineStack>,
+                    ]);
                 });
             }
         });
 
         return { displayRows, totalGroups };
-    };
+    }, [products, statusFilter, currentPage, expandedGroupId, selectedProducts]);
+
+
 
     const renderProductRow = (product: Product, isChild: boolean) => {
-
-        // Simpler guide: Just left border
         const simplifiedIndentStyle = isChild ? {
             paddingLeft: '24px',
             borderLeft: '2px solid #dfe3e8',
             marginLeft: '12px'
         } : {};
 
-        const displayName = product.title; // ALWAYS use full title for children
+        const displayName = product.title;
 
         return [
-            <div style={simplifiedIndentStyle}>
+            '',
+            <div key={`${product.id}-img`} style={simplifiedIndentStyle}>
                 <InlineStack gap="200" align="start" blockAlign="center">
                     <Thumbnail
                         source={product.imageUrl || 'https://via.placeholder.com/50'}
@@ -1085,11 +1244,11 @@ export default function Products() {
                     />
                 </InlineStack>
             </div>,
-            <Badge tone={product.status === 'active' ? 'success' : product.status === 'draft' ? 'attention' : 'info'}>
+            <Badge key={`${product.id}-status`} tone={product.status === 'active' ? 'success' : product.status === 'draft' ? 'attention' : 'info'}>
                 {product.status || 'unknown'}
             </Badge>,
-            <Text as="span" variant="bodySm" tone="subdued">{product.sku || '-'}</Text>,
-            <Text as="span" variant="bodyMd" tone={isChild ? 'subdued' : 'base'}>
+            <Text key={`${product.id}-sku`} as="span" variant="bodySm" tone="subdued">{product.sku || '-'}</Text>,
+            <Text key={`${product.id}-title`} as="span" variant="bodyMd" tone={isChild ? 'subdued' : 'base'}>
                 {displayName}
                 {product.variantTitle && product.variantTitle !== 'Default Title' && (
                     <Text as="span" tone="subdued"> - {product.variantTitle}</Text>
@@ -1098,15 +1257,16 @@ export default function Products() {
             product.metal || '-',
             product.metal === 'gold' && product.karat ? `${product.karat}K` : (product.karat ? `${product.karat}` : '-'),
             product.weightGrams ? `${product.weightGrams}g` : '-',
-            product.gemstoneType || '-',
-            formatCurrency(product.currentPrice),
-            <Button size="slim" onClick={() => handleEditProduct(product)}>
-                Edit
-            </Button>,
+            product.gemstoneType || (product.gemstones && product.gemstones.length > 0 ? product.gemstones[0].gemstoneType : '-'),
+            formatCurrency(product.currentPrice || 0),
+            <InlineStack key={`${product.id}-actions`} gap="200">
+                <Button icon={EditIcon} onClick={() => handleEditProduct(product)} />
+                <Button tone="critical" icon={DeleteIcon} onClick={() => handleDeleteProduct(product.id)} />
+            </InlineStack>
         ];
     };
 
-    const groupedInfo = getGroupedRows();
+    // Memoized grouping is already defined above
 
     return (
         <Page
@@ -1157,6 +1317,12 @@ export default function Products() {
                             setLoading(false);
                         }
                     },
+                },
+                {
+                    content: `Push Price Breakdown${selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}`,
+                    onAction: handlePushBreakdown,
+                    loading: pushingBreakdown,
+                    disabled: selectedProducts.length === 0,
                 },
                 {
                     content: 'Import CSV/Excel',
@@ -1248,8 +1414,8 @@ export default function Products() {
                             ) : (
                                 <>
                                     <DataTable
-                                        columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
-                                        headings={['#', 'Image', 'Status', 'SKU', 'Title', 'Metal', 'Karat', 'Weight', 'Gemstone', 'Current Price', 'Action']}
+                                        columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                                        headings={['Select', '#', 'Image', 'Status', 'SKU', 'Title', 'Metal', 'Karat', 'Weight', 'Gemstone', 'Current Price', 'Action']}
                                         rows={groupedInfo.displayRows}
                                     />
                                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
@@ -1318,7 +1484,8 @@ export default function Products() {
                                     type="number"
                                     value={editAutoGrossGoldWeight ?
                                         ((parseFloat(editWeight) || 0) +
-                                            (productGemstones.reduce((sum, g) => sum + (g.gemstoneWeight || 0), 0)) +
+                                            (productGemstones.reduce((sum, g) => sum + (g.gemstoneWeight || 0), 0) * 0.2) +
+                                            ((parseFloat(editStoneWeight) || 0) * 0.2) +
                                             (parseFloat(editEnamelWeightGrams) || 0)).toFixed(3)
                                         : editGrossGoldWeight
                                     }
@@ -1328,6 +1495,31 @@ export default function Products() {
                                     autoComplete="off"
                                     helpText={editAutoGrossGoldWeight ? "Calculated: Net + Stones + Enamel" : "Manual override for total weight"}
                                 />
+
+                                <InlineStack gap="400">
+                                    <div style={{ flex: 1 }}>
+                                        <TextField
+                                            label="Stone Weight (ct)"
+                                            type="number"
+                                            value={editStoneWeight}
+                                            onChange={setEditStoneWeight}
+                                            placeholder="Enter stone weight"
+                                            autoComplete="off"
+                                            helpText="Used for single gemstone products"
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <TextField
+                                            label="Stone Pieces"
+                                            type="number"
+                                            value={editStonePieces}
+                                            onChange={setEditStonePieces}
+                                            placeholder="Enter stone pieces"
+                                            autoComplete="off"
+                                            helpText="Number of stones"
+                                        />
+                                    </div>
+                                </InlineStack>
                             </BlockStack>
                         </Card>
 
@@ -2087,7 +2279,7 @@ export default function Products() {
                             />
                         )}
 
-                        {((gemstoneModalPricingType as string) === 'perCarat' || (gemstoneModalIsCustom && (gemstoneModalPricingType as string) === 'perCarat')) && (
+                        {gemstoneModalType && (
                             <TextField
                                 label={
                                     (gemstoneModalType.toLowerCase().includes('cz') || gemstoneModalType.toLowerCase().includes('cubic zirconia'))
@@ -2103,7 +2295,7 @@ export default function Products() {
                                         : "Enter weight in carats"
                                 }
                                 autoComplete="off"
-                                helpText="Price will be calculated as: Rate × Weight"
+                                helpText="Enter stone weight for pricing and gross weight calculation"
                             />
                         )}
 

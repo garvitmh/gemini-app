@@ -10,7 +10,8 @@
   3. Make sure your products have the gemini.price_breakdown metafield populated
 {% endcomment %}
 
-{% assign breakdown = product.selected_or_first_available_variant.metafields.gemini.price_breakdown %}
+{% assign current_variant = variant | default: product.selected_or_first_available_variant %}
+{% assign breakdown = current_variant.metafields.gemini.price_breakdown.value %}
 
 {% if breakdown %}
   <div class="gemini-price-breakdown" style="margin-top: 20px; border: 1px solid #e1e3e5; border-radius: 8px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -27,8 +28,11 @@
           <td style="padding: 10px 16px; color: #374151;">
             {{ breakdown.metal_name | default: 'Metal' }} Price
             {% if breakdown.has_metal_discount %}
-              <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+              <span style="margin-left:8px; font-size:11px; color:#d93025; background:#fee2e2; padding:1px 5px; border-radius:3px; font-weight:600; text-transform:uppercase;">Sale</span>
             {% endif %}
+            <div style="font-size: 12px; color: #6b7280;">
+              (₹{{ breakdown.metal_rate | times: 0.01 | money_without_currency }}/g)
+            </div>
           </td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
             {% if breakdown.has_metal_discount %}
@@ -82,18 +86,25 @@
           {% for gem in breakdown.gemstone_details.gemstones %}
             <tr style="border-bottom: 1px solid #f1f2f3;">
               <td style="padding: 10px 16px; color: #374151;">
+                {% assign gem_type_lower = gem.type | downcase %}
+                {% if gem_type_lower contains 'cz' or gem_type_lower contains 'cubic zirconia' %}
+                   {% assign unit = 'gm' %}
+                {% else %}
+                   {% assign unit = 'ct' %}
+                {% endif %}
+                
                 {{ gem.type | replace: '_', ' ' }}
                 {% if gem.clarity %}({{ gem.clarity }}){% endif %}
                 {% if gem.color %}{{ gem.color }}{% endif %}
                 {% if gem.cut %}{{ gem.cut }}{% endif %}
                 {% if gem.hasDiscount %}
-                  <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+                  <span style="margin-left:8px; font-size:11px; color:#d93025; background:#fee2e2; padding:1px 5px; border-radius:3px; font-weight:600; text-transform:uppercase;">Sale</span>
                 {% endif %}
                 {% if gem.rateNotSet %}
                   <div style="font-size: 12px; color: #d93025; font-weight: 600;">⚠️ Rate not set</div>
                 {% elsif gem.weight %}
                   {% assign gem_rate = gem.cost | divided_by: gem.weight | divided_by: 100 | round %}
-                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}ct × ₹{{ gem_rate }}/ct</div>
+                  <div style="font-size: 12px; color: #6b7280;">{{ gem.weight }}{{ unit }} × ₹{{ gem_rate }}/{{ unit }}</div>
                 {% elsif gem.pieces %}
                   {% assign gem_rate = gem.cost | divided_by: gem.pieces | divided_by: 100 | round %}
                   <div style="font-size: 12px; color: #6b7280;">{{ gem.pieces }} pcs × ₹{{ gem_rate }}/pc</div>
@@ -105,10 +116,10 @@
                 {% else %}
                   {% if gem.hasDiscount %}
                     <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                      Rs. {{ gem.cost | times: 0.01 | round: 2 }}
+                      {{ gem.cost | times: 0.01 | money }}
                     </div>
                   {% endif %}
-                  Rs. {{ gem.finalCost | times: 0.01 | round: 2 }}
+                  {{ gem.finalCost | times: 0.01 | money }}
                 {% endif %}
               </td>
             </tr>
@@ -119,7 +130,7 @@
             <tr style="border-bottom: 1px solid #f1f2f3; background-color: #f9fafb;">
               <td style="padding: 10px 16px; color: #374151; font-weight: 600;">Total Gemstones</td>
               <td style="padding: 10px 16px; text-align: right; font-weight: 600;">
-                Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
+                {{ breakdown.gemstone_price | times: 0.01 | money }}
               </td>
             </tr>
           {% endif %}
@@ -130,27 +141,37 @@
             <td style="padding: 10px 16px; color: #374151;">
               {{ breakdown.gemstone_name | default: 'Gemstone' | replace: '_', ' ' }}
               {% if breakdown.has_gemstone_discount %}
-                <span style="margin-left: 8px; font-size: 12px; color: #d93025; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sale</span>
+                <span style="margin-left:8px; font-size:11px; color:#d93025; background:#fee2e2; padding:1px 5px; border-radius:3px; font-weight:600; text-transform:uppercase;">Sale</span>
               {% endif %}
+              
+              {% assign gem_name_lower = breakdown.gemstone_name | downcase %}
+              {% if gem_name_lower contains 'cz' or gem_name_lower contains 'cubic zirconia' %}
+                 {% assign unit = 'gm' %}
+              {% else %}
+                 {% assign unit = 'ct' %}
+              {% endif %}
+
               {% if breakdown.gemstone_details.type == 'per_carat' %}
                 <div style="font-size: 12px; color: #6b7280;">
-                  {{ breakdown.gemstone_details.weight }}ct × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 }}/ct
+                  {{ breakdown.gemstone_details.weight }}{{ unit }} × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 | money_without_currency }}/{{ unit }}
                 </div>
               {% elsif breakdown.gemstone_details.type == 'per_piece' %}
                 <div style="font-size: 12px; color: #6b7280;">
-                  {{ breakdown.gemstone_details.pieces }} pcs × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 }}/pc
+                  {{ breakdown.gemstone_details.pieces }} pcs × ₹{{ breakdown.gemstone_details.rate | divided_by: 1 | money_without_currency }}/pc
                 </div>
               {% elsif breakdown.gemstone_details.type == 'manual' %}
-                <div style="font-size: 12px; color: #6b7280;">Manual Price</div>
+                <div style="font-size: 11px; color: #6b7280; font-weight: 400;">Gemstone Pricing Source: Manual (Per Piece)</div>
+              {% else %}
+                <div style="font-size: 11px; color: #6b7280; font-weight: 400;">Gemstone Pricing Source: Rate-Based</div>
               {% endif %}
             </td>
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_gemstone_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  Rs. {{ breakdown.gemstone_price_original | times: 0.01 | round: 2 }}
+                  {{ breakdown.gemstone_price_original | times: 0.01 | money }}
                 </div>
               {% endif %}
-              Rs. {{ breakdown.gemstone_price | times: 0.01 | round: 2 }}
+              {{ breakdown.gemstone_price | times: 0.01 | money }}
             </td>
           </tr>
         {% endif %}
@@ -172,10 +193,10 @@
             <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
               {% if breakdown.has_enamel_discount %}
                 <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px;">
-                  Rs. {{ breakdown.enamel_price_original | times: 0.01 | round: 2 }}
+                  {{ breakdown.enamel_price_original | times: 0.01 | money }}
                 </div>
               {% endif %}
-              Rs. {{ breakdown.enamel_price | times: 0.01 | round: 2 }}
+              {{ breakdown.enamel_price | times: 0.01 | money }}
             </td>
           </tr>
         {% endif %}
@@ -184,7 +205,7 @@
         <tr style="background-color: #fafbfb; border-top: 1px solid #e1e3e5;">
           <td style="padding: 8px 16px; font-weight: 600; color: #374151;">Subtotal</td>
           <td style="padding: 8px 16px; text-align: right; font-weight: 600; color: #374151;">
-            Rs. {{ breakdown.subtotal | times: 0.01 | round: 2 }}
+            {{ breakdown.subtotal | times: 0.01 | money }}
           </td>
         </tr>
         
@@ -192,8 +213,8 @@
         <tr style="border-bottom: 1px solid #f1f2f3;">
           <td style="padding: 10px 16px; color: #374151;">GST ({{ breakdown.gst_pct }}%)</td>
           <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
-            {% assign gst_value = breakdown.gst_amount | default: breakdown.gst | default: 0 %}
-            Rs. {{ gst_value | times: 0.01 | round: 2 }}
+            {% assign gst_value = breakdown.gst_amount | default: 0 %}
+            {{ gst_value | times: 0.01 | money }}
           </td>
         </tr>
         
@@ -220,10 +241,10 @@
         
         {% comment %} Final Price Row {% endcomment %}
         <tr style="background-color: #f0fdf4;">
-          <td style="padding: 12px 16px; font-weight: 700; color: #166534;">Final Price</td>
-          <td style="padding: 12px 16px; text-align: right; font-weight: 700; color: #166534;">
+          <td style="padding: 14px 16px; font-weight: 700; color: #166534; font-size: 16px;">Final Price</td>
+          <td style="padding: 14px 16px; text-align: right; font-weight: 700; color: #166534; font-size: 16px;">
             {% if breakdown.has_any_discount %}
-              <div style="text-decoration: line-through; color: #9ca3af; font-size: 12px; font-weight: 400;">
+              <div style="text-decoration: line-through; color: #9ca3af; font-size: 11px; font-weight: 400;">
                 {{ breakdown.total_original | times: 0.01 | money }}
               </div>
             {% endif %}
