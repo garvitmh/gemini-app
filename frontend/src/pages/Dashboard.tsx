@@ -11,6 +11,7 @@ import {
 } from '@shopify/polaris';
 import { format } from 'date-fns';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/formatCurrency';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 interface MetalRate {
@@ -54,13 +55,7 @@ export default function Dashboard() {
         }
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            minimumFractionDigits: 2,
-        }).format(amount);
-    };
+    // FIX BUG-23: Using shared formatCurrency from utils/formatCurrency.ts
 
     const getMetalLabel = (metal: string, karat?: number) => {
         if (metal === 'gold' && karat) {

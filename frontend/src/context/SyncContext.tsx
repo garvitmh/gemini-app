@@ -20,6 +20,8 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [startedAt, setStartedAt] = useState<Date | null>(null);
     const [completedAt, setCompletedAt] = useState<Date | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollingStartTimeRef = useRef<number | null>(null);
+    const MAX_POLLING_DURATION_MS = 10 * 60 * 1000; // FIX BUG-27: 10 minute timeout
 
     const cleanupPolling = () => {
         if (pollingIntervalRef.current) {
@@ -50,6 +52,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const startPolling = () => {
         cleanupPolling();
+        pollingStartTimeRef.current = Date.now(); // FIX BUG-27: Track polling start
         pollingIntervalRef.current = setInterval(checkSyncStatus, 2000);
     };
 
@@ -86,8 +89,13 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         } catch (error) {
             console.error('Error checking sync status:', error);
-            // Don't fail immediately on status check error, might be temporary
-            // But if it persists, we should probably stop polling to avoid infinite loops if server is down
+            // FIX BUG-27: Stop polling if it has been running too long
+            if (pollingStartTimeRef.current && (Date.now() - pollingStartTimeRef.current > MAX_POLLING_DURATION_MS)) {
+                setSyncStatus('error');
+                setSyncMessage('Sync timed out after 10 minutes. Please check the server logs and retry.');
+                cleanupPolling();
+                toast.error('Sync timed out. Please retry.');
+            }
         }
     };
 

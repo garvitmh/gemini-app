@@ -14,6 +14,7 @@ import {
     RadioButton,
 } from '@shopify/polaris';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/formatCurrency';
 import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
 
 interface MetalRate {
@@ -268,12 +269,7 @@ export default function Rates() {
         setShowDeleteModal(true);
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-        }).format(amount);
-    };
+    // FIX BUG-23: Using shared formatCurrency from utils/formatCurrency.ts
 
     const formatStoneRateDisplay = (rate: StoneRate) => {
         const parts = [getGemstoneDisplayName(rate.stoneType)];

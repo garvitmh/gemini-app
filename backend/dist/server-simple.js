@@ -54,7 +54,11 @@ const context_middleware_1 = require("./middleware/context.middleware");
 const products_routes_1 = __importDefault(require("./routes/products.routes"));
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+// FIX BUG-24: Warn loudly if JWT_SECRET is not set in production
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_super_secret_gemini_2026_xyz';
+if (!process.env.JWT_SECRET) {
+    console.warn('⚠️  WARNING: JWT_SECRET is not set in environment. Using fallback — this is INSECURE in production!');
+}
 const PORT = process.env.PORT || 3000;
 const prisma = new client_1.PrismaClient();
 exports.prisma = prisma;
@@ -224,22 +228,22 @@ app.post('/webhooks/app/uninstalled', verifyWebhookHmac, async (req, res) => {
 app.use(async (req, res, next) => {
     // Only intercept paths that start with /api/
     if (!req.path.startsWith('/api/')) return next();
-    
+
     // Whitelist login, health, and status
     if (['/api/login', '/api/health', '/api/db-status'].includes(req.path)) {
         return next();
     }
-    
+
     // ALLOW CORS PREFLIGHT REQUESTS TO PASS THROUGH!
     if (req.method === 'OPTIONS') {
         return next();
     }
-    
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
-    
+
     const token = authHeader.split(' ')[1];
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -247,7 +251,7 @@ app.use(async (req, res, next) => {
     } catch (err) {
         return res.status(401).json({ error: 'Unauthorized: Token expired or invalid' });
     }
-    
+
     res.locals.shopify = {
         session: {
             shop: SHOPIFY_STORE,
@@ -262,17 +266,17 @@ app.post('/api/login', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password required' });
         }
-        
+
         const user = await prisma.adminUser.findUnique({ where: { username } });
         if (!user) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        
+
         const valid = await bcrypt.compare(password, user.password);
         if (!valid) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        
+
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
         res.json({ token, username: user.username });
     } catch (err) {
@@ -352,7 +356,8 @@ app.get('/api/sync/status', async (req, res) => {
 // Database status check
 app.get('/api/db-status', async (req, res) => {
     try {
-        const shop = req.context.shop;
+        // FIX BUG-13: Safely access shop — this endpoint is whitelisted from JWT auth
+        const shop = req.context?.shop;
         const productsCount = shop ? await prisma.product.count({ where: { shopId: shop.id } }) : 0;
         const ratesCount = shop ? await prisma.metalRate.count({ where: { shopId: shop.id } }) : 0;
         res.json({
@@ -416,7 +421,10 @@ app.get('/api/rates', async (req, res) => {
 // Update rate
 app.post('/api/rates/update', async (req, res) => {
     try {
-        const shop = await prisma.shop.findFirst({ include: { settings: true } });
+        // FIX BUG-14: Use req.context.shop instead of findFirst (multi-shop safety)
+        const shop = req.context?.shop
+            ? await prisma.shop.findUnique({ where: { id: req.context.shop.id }, include: { settings: true } })
+            : await prisma.shop.findFirst({ include: { settings: true } });
         if (!shop) {
             return res.status(404).json({ error: 'Shop not found' });
         }
@@ -1038,14 +1046,18 @@ app.get('/api/audit/history', async (req, res) => {
     try {
         const { page = 1, limit = 50 } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
+        // FIX BUG-18: Filter price history by shop to prevent cross-shop data leakage
+        const shop = req.context?.shop;
+        const shopFilter = shop ? { product: { shopId: shop.id } } : {};
         const [history, total] = await Promise.all([
             prisma.priceHistory.findMany({
+                where: shopFilter,
                 include: { product: { select: { sku: true, title: true } } },
                 orderBy: { pushedAt: 'desc' },
                 skip,
                 take: parseInt(limit),
             }),
-            prisma.priceHistory.count(),
+            prisma.priceHistory.count({ where: shopFilter }),
         ]);
         res.json({
             history,
@@ -1077,92 +1089,7 @@ app.get('/api/shopify/collections', async (req, res) => {
         res.json([]);
     }
 });
-// Get products
-app.get('/api/products', async (req, res) => {
-    try {
-        const shop = req.context.shop;
-        if (!shop) {
-            return res.status(404).json({ error: 'Shop not found' });
-        }
-        const { page = 1, limit = 50, search, collectionId, status, metal, karat } = req.query;
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const skip = (pageNum - 1) * limitNum;
-        // Base filter criteria
-        const productFilter = { shopId: shop.id };
-        if (status && status !== 'all') {
-            productFilter.status = status;
-        }
-        if (metal) {
-            productFilter.metal = metal;
-        }
-        if (karat) {
-            productFilter.karat = parseInt(karat);
-        }
-        if (search) {
-            productFilter.OR = [
-                { sku: { contains: search } },
-                { title: { contains: search } },
-            ];
-        }
-        // Apply Collection Filter
-        const accessToken = shop.accessToken || SHOPIFY_ACCESS_TOKEN;
-        console.log(`[FILTER DEBUG] collectionId: ${collectionId}, accessToken is present: ${!!accessToken}`);
-        if (collectionId && accessToken) {
-            const productIds = await shopify_service_1.ShopifyService.getCollectionProductIds(accessToken, collectionId);
-            console.log(`[FILTER DEBUG] Found ${productIds.length} products for collection ${collectionId}`);
-            if (productIds.length > 0) {
-                productFilter.shopifyProductId = { in: productIds };
-            }
-            else {
-                productFilter.shopifyProductId = { in: [] }; // No products match
-            }
-        }
-        console.log(`[PAGINATION DEBUG] Requesting Page: ${pageNum}, Limit: ${limitNum}, Skip: ${skip}`);
-        // 1. Get the paginated list of distinct shopifyProductIds
-        const paginatedGroups = await prisma.product.findMany({
-            where: productFilter,
-            distinct: ['shopifyProductId'],
-            select: { shopifyProductId: true },
-            orderBy: { updatedAt: 'desc' },
-            skip,
-            take: limitNum,
-        });
-        const targetShopifyProductIds = paginatedGroups.map(p => p.shopifyProductId);
-        // 2. Fetch all variants for these specific products
-        const products = await prisma.product.findMany({
-            where: {
-                shopifyProductId: { in: targetShopifyProductIds },
-                ...productFilter,
-            },
-            include: {
-                gemstones: true,
-                makingGroup: true,
-            },
-            orderBy: { updatedAt: 'desc' },
-        });
-        // 3. Get total count of UNIQUE products (groups)
-        const allGroups = await prisma.product.groupBy({
-            by: ['shopifyProductId'],
-            where: productFilter,
-        });
-        const total = allGroups.length;
-        console.log(`[PAGINATION DEBUG] Found ${targetShopifyProductIds.length} groups, ${products.length} total variants. Total groups in DB: ${total}`);
-        res.json({
-            products,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                total,
-                pages: Math.ceil(total / limitNum),
-            },
-        });
-    }
-    catch (error) {
-        console.error('Error fetching products:', error);
-        res.status(500).json({ error: 'Failed to fetch products' });
-    }
-});
+// FIX BUG-03: Duplicate GET /api/products removed — handled by products.routes.js router (mounted at line 284)
 // Manual bulk price update endpoint
 app.post('/api/products/update-all-prices', async (req, res) => {
     try {
@@ -1202,17 +1129,29 @@ app.post('/api/products/sync', async (req, res) => {
             return res.status(404).json({ error: 'Shop not found' });
         }
         console.log(`Syncing products from ${SHOPIFY_STORE}...`);
-        // Fetch products from Shopify REST API
-        console.log('Making Shopify API request...');
-        const response = await axios_1.default.get(`https://${SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250`, {
-            headers: {
-                'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
-            },
-            timeout: 60000, // Increased to 60 seconds
-        });
-        console.log('Received response from Shopify.');
-        const shopifyProducts = response.data.products;
-        console.log(`Fetched ${shopifyProducts.length} products to process.`);
+        // FIX BUG-15: Paginate through ALL products (Shopify limit is 250 per page)
+        console.log('Making Shopify API requests (paginated)...');
+        let shopifyProducts = [];
+        let nextPageUrl = `https://${SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250`;
+
+        while (nextPageUrl) {
+            const response = await axios_1.default.get(nextPageUrl, {
+                headers: {
+                    'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+                },
+                timeout: 60000,
+            });
+            const pageProducts = response.data.products || [];
+            shopifyProducts = shopifyProducts.concat(pageProducts);
+            console.log(`Fetched ${pageProducts.length} products (total so far: ${shopifyProducts.length})`);
+
+            // Check for next page via Link header
+            const linkHeader = response.headers['link'] || response.headers['Link'] || '';
+            const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+            nextPageUrl = nextMatch ? nextMatch[1] : null;
+        }
+
+        console.log(`Total products fetched from Shopify: ${shopifyProducts.length}`);
         let syncedCount = 0;
         // Process products sequentially (reverted from batch processing)
         for (const product of shopifyProducts) {
@@ -1821,7 +1760,17 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
                             });
                         }
                         const oldPrice = productWithGemstones.currentPrice || 0;
-                        const { price: newPrice, breakdown } = await pricing_service_1.PricingService.calculateProductPrice(productWithGemstones, rate.ratePerGram, stoneRate, settings);
+                        // FIX BUG-09: Lookup enamel rate before price calculation
+                        let enamelRate = null;
+                        if (productWithGemstones.enamelColor) {
+                            enamelRate = await prisma.enamelRate.findFirst({
+                                where: {
+                                    shopId: shop.id,
+                                    enamelColor: productWithGemstones.enamelColor
+                                }
+                            });
+                        }
+                        const { price: newPrice, breakdown } = await pricing_service_1.PricingService.calculateProductPrice(productWithGemstones, rate.ratePerGram, stoneRate, settings, enamelRate);
                         const breakdownHtml = generateBreakdownHtml(breakdown);
                         // Update DB Price and breakdown along with History in a transaction
                         await prisma.$transaction(async (tx) => {
@@ -1844,17 +1793,22 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
                         });
                         // Push to Shopify (async sync)
                         const shopifyResult = await pushToShopify(shop.domain, shop.accessToken || SHOPIFY_ACCESS_TOKEN, productWithGemstones, newPrice, breakdown);
+                        // FIX BUG-11: Update existing history record status instead of creating duplicate
                         if (!shopifyResult.success) {
-                            await prisma.priceHistory.create({
-                                data: {
-                                    productId: product.id,
-                                    oldPrice: oldPrice,
-                                    newPrice: newPrice,
-                                    status: 'failed',
-                                    errorMessage: `Shopify sync failed: ${shopifyResult.error}`,
-                                    triggeredBy: 'bulk_import'
-                                }
+                            // Find the success record we just created in the transaction above and update it
+                            const latestHistory = await prisma.priceHistory.findFirst({
+                                where: { productId: product.id, triggeredBy: 'bulk_import', status: 'success' },
+                                orderBy: { pushedAt: 'desc' }
                             });
+                            if (latestHistory) {
+                                await prisma.priceHistory.update({
+                                    where: { id: latestHistory.id },
+                                    data: {
+                                        status: 'failed',
+                                        errorMessage: `Shopify sync failed: ${shopifyResult.error}`
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -1865,7 +1819,8 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
             catch (rowError) {
                 console.error(`❌ [DIAGNOSTIC] Row ${rowIndex} individual error for SKU ${skuStr}:`, rowError);
                 errors.push({ sku: skuStr, error: rowError.message });
-                throw rowError; // Bubble up to master catch for Phase 1
+                // FIX BUG-16: Removed 'throw rowError' — one bad row should NOT abort the entire import.
+                // Errors are collected and returned in the response.
             }
         }
         res.json({ success: true, updatedCount, errors });
@@ -2009,7 +1964,17 @@ app.put('/api/products/:id', async (req, res) => {
                         orderBy: { updatedAt: 'desc' }
                     });
                 }
-                const result = await pricing_service_1.PricingService.calculateProductPrice(productWithGemstones, metalRate.ratePerGram, stoneRate, settings);
+                // FIX BUG-09: Lookup enamel rate before price calculation
+                let enamelRate = null;
+                if (productWithGemstones.enamelColor) {
+                    enamelRate = await prisma.enamelRate.findFirst({
+                        where: {
+                            shopId: shop.id,
+                            enamelColor: productWithGemstones.enamelColor
+                        }
+                    });
+                }
+                const result = await pricing_service_1.PricingService.calculateProductPrice(productWithGemstones, metalRate.ratePerGram, stoneRate, settings, enamelRate);
                 newPrice = result.price;
                 breakdown = result.breakdown;
                 // 5. Atomic Update and History Creation
@@ -2041,7 +2006,8 @@ app.put('/api/products/:id', async (req, res) => {
                 const shopDomain = res.locals.shopify?.session?.shop || shop.domain;
                 const dbShop = await prisma.shop.findUnique({ where: { domain: shopDomain } });
                 const accessToken = dbShop?.accessToken || SHOPIFY_ACCESS_TOKEN;
-                const shopifyResult = await pushToShopify(shopDomain, accessToken, product, newPrice, breakdown, oldPrice);
+                // FIX BUG-12: Removed extra 'oldPrice' arg — pushToShopify only accepts 5 params
+                const shopifyResult = await pushToShopify(shopDomain, accessToken, product, newPrice, breakdown);
                 if (!shopifyResult.success) {
                     await prisma.priceHistory.create({
                         data: {
@@ -2244,10 +2210,25 @@ app.put('/api/settings', async (req, res) => {
         if (!shop) {
             return res.status(404).json({ error: 'Shop not found' });
         }
+        // FIX BUG-19: Whitelist allowed fields to prevent mass assignment vulnerability
+        const allowedFields = [
+            'defaultMakingChargeType', 'defaultMakingChargeValue',
+            'defaultWastagePct', 'defaultGstPct', 'defaultDiscount',
+            'defaultDiscountType', 'defaultMetalDiscountType', 'defaultMetalDiscountValue',
+            'defaultMakingDiscountType', 'defaultMakingDiscountValue',
+            'defaultGemstoneDiscountType', 'defaultGemstoneDiscountValue',
+            'autoSyncEnabled', 'syncIntervalMinutes'
+        ];
+        const sanitizedData = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) {
+                sanitizedData[key] = req.body[key];
+            }
+        }
         const settings = await prisma.shopSettings.upsert({
             where: { shopId: shop.id },
-            update: req.body,
-            create: { ...req.body, shopId: shop.id }
+            update: sanitizedData,
+            create: { ...sanitizedData, shopId: shop.id }
         });
         res.json({ success: true, settings });
     }
@@ -2383,14 +2364,7 @@ app.get('/', (req, res) => {
         shop: SHOPIFY_STORE,
     });
 });
-// Health check endpoint for Render.com
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        service: 'gemini-backend'
-    });
-});
+// FIX BUG-20: Duplicate health check removed — already defined at line 331
 // ===== BULK OPERATIONS =====
 // Trigger bulk price update
 app.post('/api/bulk/trigger-price-update', async (req, res) => {

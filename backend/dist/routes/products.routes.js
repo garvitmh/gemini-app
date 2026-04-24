@@ -966,7 +966,10 @@ router.post('/push-breakdown', async (req, res) => {
                 sku: true,
                 shopifyVariantId: true,
                 currentPrice: true,
-                priceBreakdownHtml: true
+                priceBreakdownHtml: true,
+                metal: true,
+                karat: true,
+                weightGrams: true
             }
         });
 
@@ -974,19 +977,42 @@ router.post('/push-breakdown', async (req, res) => {
             return res.status(404).json({ error: 'No products found' });
         }
 
-        const shopifyService = await shopify_service_1.ShopifyService.forShop(shop.domain);
-        const results = [];
-        let successCount = 0;
-        let failedCount = 0;
+        // FIX BUG-07: Pre-push validation — check for incomplete products
+        const validProductIds = [];
+        const skippedProducts = [];
+        for (const product of products) {
+            if (!product.metal || !product.weightGrams) {
+                skippedProducts.push({
+                    productId: product.id,
+                    sku: product.sku,
+                    success: false,
+                    error: `Missing required data: ${!product.metal ? 'metal type' : ''}${!product.metal && !product.weightGrams ? ', ' : ''}${!product.weightGrams ? 'weight' : ''}`
+                });
+            } else {
+                validProductIds.push(product.id);
+            }
+        }
 
-        // Push each product
-        // 1. Recalculate prices first to ensure freshness (fixes "price different when edit" issue)
-        console.log(`[PUSH-BREAKDOWN] Recalculating prices for ${productIds.length} products...`);
-        const priceResults = await pricing_service_1.PricingService.calculateBulkPrices(shop.id, productIds);
+        if (validProductIds.length === 0) {
+            return res.status(400).json({
+                error: 'None of the selected products have complete pricing data (metal + weight required)',
+                skipped: skippedProducts
+            });
+        }
+
+        const shopifyService = await shopify_service_1.ShopifyService.forShop(shop.domain);
+        const results = [...skippedProducts]; // Start with skipped products
+        let successCount = 0;
+        let failedCount = skippedProducts.length;
+
+        // Push each valid product
+        // 1. Recalculate prices first to ensure freshness
+        console.log(`[PUSH-BREAKDOWN] Recalculating prices for ${validProductIds.length} valid products (${skippedProducts.length} skipped)...`);
+        const priceResults = await pricing_service_1.PricingService.calculateBulkPrices(shop.id, validProductIds);
 
         // Map results for easy lookup
         const calculatedMap = new Map();
-        priceResults.forEach(res => calculatedMap.set(res.productId, res));
+        priceResults.forEach(calcItem => calculatedMap.set(calcItem.productId, calcItem));
 
         for (const productId of productIds) {
             try {

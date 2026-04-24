@@ -12,6 +12,7 @@ import {
 } from '@shopify/polaris';
 import { format } from 'date-fns';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/formatCurrency';
 
 interface AuditLog {
     id: string;
@@ -71,13 +72,7 @@ export default function History() {
         }
     };
 
-    const formatCurrency = (amount?: number | null) => {
-        if (amount === null || amount === undefined) return '-';
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-        }).format(amount);
-    };
+    // FIX BUG-23: Using shared formatCurrency from utils/formatCurrency.ts
 
     const priceHistoryRows = priceHistory.map((item) => [
         format(new Date(item.pushedAt), 'MMM dd, yyyy HH:mm'),

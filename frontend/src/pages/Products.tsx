@@ -22,6 +22,7 @@ import {
 } from '@shopify/polaris';
 import { DeleteIcon, EditIcon, ChevronRightIcon, ChevronDownIcon, UploadIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/formatCurrency';
 import { useDebounce } from '../utils/useDebounce';
 import { getGemstoneDisplayName } from '../utils/gemstoneUtils';
 import CollectionFilter from '../components/CollectionFilter';
@@ -792,9 +793,8 @@ export default function Products() {
         setEditAutoGrossGoldWeight(product.autoGrossGoldWeight || false);
         setEditWastagePct(product.wastagePct !== undefined ? product.wastagePct : null);
         setEditGstPct(product.gstPct !== undefined ? product.gstPct : null);
-        
-        // Load gemstones
-        setProductGemstones(product.gemstones || []);
+
+        // Discount state (moved above gemstones to avoid duplication)
         setEditMetalDiscountType(product.metalDiscountType || 'none');
         setEditMetalDiscountValue(product.metalDiscountValue?.toString() || '');
         setEditMakingDiscountType(product.makingDiscountType || 'none');
@@ -968,7 +968,18 @@ export default function Products() {
             setLoading(true);
             setSuccessMessage(`Exporting ${format.toUpperCase()}...`);
 
-            const response = await fetch(`/api/products/export?format=${format}&t=${Date.now()}`);
+            // FIX BUG-01: Include JWT auth header in raw fetch call
+            const token = localStorage.getItem('gemini_auth_token');
+            const response = await fetch(`/api/products/export?format=${format}&t=${Date.now()}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+
+            // FIX: Check for auth/server errors before treating as blob
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+                throw new Error(errorData.error || `Export failed with status ${response.status}`);
+            }
+
             const blob = await response.blob();
 
             // Extract filename from Content-Disposition header
@@ -993,9 +1004,9 @@ export default function Products() {
 
             setSuccessMessage('Export successful');
             setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Export error:', error);
-            setError(`Failed to export ${format.toUpperCase()}`);
+            setError(error.message || `Failed to export ${format.toUpperCase()}`);
         } finally {
             setLoading(false);
         }
@@ -1085,15 +1096,7 @@ export default function Products() {
     ]);
 
 
-    const formatCurrency = (amount?: number) => {
-        if (amount === null || amount === undefined) return '-';
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(amount);
-    };
+    // FIX BUG-23: Using shared formatCurrency from utils/formatCurrency.ts
 
     // Grouping Helper
     // Grouping Helper (Canonical Rule: No Orphans)
@@ -1285,7 +1288,18 @@ export default function Products() {
                             setLoading(true);
                             setSuccessMessage('Generating template...');
 
-                            const response = await fetch(`/api/products/template?format=xlsx&t=${Date.now()}`);
+                            // FIX BUG-02: Include JWT auth header in raw fetch call
+                            const token = localStorage.getItem('gemini_auth_token');
+                            const response = await fetch(`/api/products/template?format=xlsx&t=${Date.now()}`, {
+                                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                            });
+
+                            // FIX: Check for auth/server errors before treating as blob
+                            if (!response.ok) {
+                                const errorData = await response.json().catch(() => ({ error: 'Template download failed' }));
+                                throw new Error(errorData.error || `Download failed with status ${response.status}`);
+                            }
+
                             const blob = await response.blob();
 
                             // Extract filename from Content-Disposition header
@@ -1310,16 +1324,17 @@ export default function Products() {
 
                             setSuccessMessage('Template downloaded successfully');
                             setTimeout(() => setSuccessMessage(''), 3000);
-                        } catch (error) {
+                        } catch (error: any) {
                             console.error('Download error:', error);
-                            setError('Failed to download template');
+                            setError(error.message || 'Failed to download template');
                         } finally {
                             setLoading(false);
                         }
                     },
                 },
                 {
-                    content: `Push Price Breakdown${selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}`,
+                    content: `Push Prices to Shopify${selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}`,
+                    helpText: 'Recalculates and pushes current database prices to Shopify for selected products',
                     onAction: handlePushBreakdown,
                     loading: pushingBreakdown,
                     disabled: selectedProducts.length === 0,
@@ -1413,6 +1428,35 @@ export default function Products() {
                                 </EmptyState>
                             ) : (
                                 <>
+                                    {/* FIX BUG-05: Select All / Deselect All bar */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', borderBottom: '1px solid #dfe3e8', background: selectedProducts.length > 0 ? '#f1f8ff' : 'transparent' }}>
+                                        <Checkbox
+                                            label=""
+                                            checked={products.length > 0 && products.every(p => selectedProducts.includes(p.id))}
+                                            onChange={(checked) => {
+                                                if (checked) {
+                                                    const allIds = products.map(p => p.id);
+                                                    setSelectedProducts(prev => {
+                                                        const newSet = new Set([...prev, ...allIds]);
+                                                        return Array.from(newSet);
+                                                    });
+                                                } else {
+                                                    const currentPageIds = products.map(p => p.id);
+                                                    setSelectedProducts(prev => prev.filter(id => !currentPageIds.includes(id)));
+                                                }
+                                            }}
+                                        />
+                                        <Text as="span" variant="bodySm" tone="subdued">
+                                            {selectedProducts.length > 0
+                                                ? `${selectedProducts.length} selected`
+                                                : 'Select all on this page'}
+                                        </Text>
+                                        {selectedProducts.length > 0 && (
+                                            <Button size="slim" onClick={() => setSelectedProducts([])}>
+                                                Deselect All
+                                            </Button>
+                                        )}
+                                    </div>
                                     <DataTable
                                         columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
                                         headings={['Select', '#', 'Image', 'Status', 'SKU', 'Title', 'Metal', 'Karat', 'Weight', 'Gemstone', 'Current Price', 'Action']}

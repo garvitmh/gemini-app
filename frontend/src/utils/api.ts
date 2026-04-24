@@ -66,6 +66,13 @@ api.interceptors.response.use(
                 error.userMessage = 'Resource not found.';
             } else if (status === 401 || status === 403) {
                 error.userMessage = 'Authentication required. Please log in.';
+                // FIX BUG-10: Auto-logout on token expiry
+                localStorage.removeItem('gemini_auth_token');
+                localStorage.removeItem('gemini_auth_username');
+                // Redirect to login page (avoid infinite loop if already on login)
+                if (window.location.pathname !== '/login') {
+                    window.location.href = '/login';
+                }
             } else if (status === 500) {
                 error.userMessage = 'Server error. Please try again later.';
             } else if (status >= 400 && status < 500) {
