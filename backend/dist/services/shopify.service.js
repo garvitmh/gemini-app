@@ -220,7 +220,7 @@ class ShopifyService {
         return html;
     }
 
-    // Update variant with full price breakdown (price + metafields) — OPTIMISED: single GraphQL request
+    // Update variant with full price breakdown — REST for price (reliable) + GraphQL for metafields
     async updateVariantWithBreakdown(variantId, price, breakdown) {
         try {
             // Ensure breakdown is an object if possible
@@ -235,48 +235,52 @@ class ShopifyService {
 
             // GID for GraphQL
             const gid = variantId.startsWith('gid://') ? variantId : `gid://shopify/ProductVariant/${variantId}`;
+            // Numeric ID for REST API
+            const numericId = gid.split('ProductVariant/').pop();
 
-            // ─── SINGLE combined mutation: price + metafields in ONE request ───
-            const breakdownJson = typeof breakdown === 'string' ? breakdown : JSON.stringify(breakdown);
-            const makingChargesFormatted = breakdown ? (breakdown.making_charges / 100).toFixed(2) : '0.00';
-
-            const combinedMutation = `
-                mutation UpdateVariantAndMeta($variantInput: ProductVariantInput!, $metafields: [MetafieldsSetInput!]!) {
-                    productVariantUpdate(input: $variantInput) {
-                        productVariant { id price }
-                        userErrors { field message }
-                    }
-                    metafieldsSet(metafields: $metafields) {
-                        metafields { id key }
-                        userErrors { field message }
-                    }
-                }
-            `;
-            const combinedVariables = {
-                variantInput: { id: gid, price: price.toFixed(2) },
-                metafields: breakdown ? [
-                    { ownerId: gid, namespace: "gemini",  key: "price_breakdown", value: breakdownJson, type: "json" },
-                    { ownerId: gid, namespace: "custom",  key: "price_breakdown", value: breakdownJson, type: "json" },
-                    { ownerId: gid, namespace: "custom",  key: "code_form",       value: breakdownJson, type: "json" },
-                    { ownerId: gid, namespace: "custom",  key: "makingcharges",   value: makingChargesFormatted, type: "number_decimal" }
-                ] : []
-            };
-
-            const res = await axios_1.default.post(
-                `https://${this.domain}/admin/api/2024-01/graphql.json`,
-                { query: combinedMutation, variables: combinedVariables },
+            // ─── Step 1: Update PRICE via REST API (most reliable method) ───
+            const priceRes = await axios_1.default.put(
+                `https://${this.domain}/admin/api/2024-01/variants/${numericId}.json`,
+                { variant: { id: numericId, price: price.toFixed(2) } },
                 { headers: ShopifyService.getHeaders(this.accessToken) }
             );
+            const confirmedPrice = priceRes.data?.variant?.price;
+            if (!confirmedPrice) {
+                console.error(`[SHOPIFY] ❌ Price update failed for variant ${variantId}`);
+                return { success: false, error: 'Price update failed' };
+            }
+            console.log(`[SHOPIFY] ✓ Price confirmed → ₹${confirmedPrice}`);
 
-            const variantErrors = res.data?.data?.productVariantUpdate?.userErrors;
-            const metaErrors    = res.data?.data?.metafieldsSet?.userErrors;
-            const updatedPrice  = res.data?.data?.productVariantUpdate?.productVariant?.price;
+            // ─── Step 2: Update METAFIELDS via GraphQL ───
+            if (breakdown) {
+                const breakdownJson = typeof breakdown === 'string' ? breakdown : JSON.stringify(breakdown);
+                const makingChargesFormatted = (breakdown.making_charges / 100).toFixed(2);
 
-            if (variantErrors?.length) console.error('[SHOPIFY] ❌ Price errors:', variantErrors);
-            else console.log(`[SHOPIFY] ✓ Price updated → ₹${updatedPrice}`);
-
-            if (metaErrors?.length) console.error('[SHOPIFY] ❌ Metafield errors:', metaErrors);
-            else console.log(`[SHOPIFY] ✓ Metafields updated`);
+                const metafieldMutation = `
+                    mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
+                        metafieldsSet(metafields: $metafields) {
+                            metafields { id key }
+                            userErrors { field message }
+                        }
+                    }
+                `;
+                const metafieldVariables = {
+                    metafields: [
+                        { ownerId: gid, namespace: "gemini", key: "price_breakdown", value: breakdownJson, type: "json" },
+                        { ownerId: gid, namespace: "custom", key: "price_breakdown", value: breakdownJson, type: "json" },
+                        { ownerId: gid, namespace: "custom", key: "code_form",       value: breakdownJson, type: "json" },
+                        { ownerId: gid, namespace: "custom", key: "makingcharges",   value: makingChargesFormatted, type: "number_decimal" }
+                    ]
+                };
+                const mfRes = await axios_1.default.post(
+                    `https://${this.domain}/admin/api/2024-01/graphql.json`,
+                    { query: metafieldMutation, variables: metafieldVariables },
+                    { headers: ShopifyService.getHeaders(this.accessToken) }
+                );
+                const metaErrors = mfRes.data?.data?.metafieldsSet?.userErrors;
+                if (metaErrors?.length) console.error('[SHOPIFY] ❌ Metafield errors:', JSON.stringify(metaErrors));
+                else console.log(`[SHOPIFY] ✓ Metafields updated`);
+            }
 
             return { success: true };
         } catch (error) {
