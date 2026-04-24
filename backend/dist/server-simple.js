@@ -2295,7 +2295,9 @@ app.post('/api/settings/apply-to-all', async (req, res) => {
             where: { shopId: shop.id },
             orderBy: { updatedAt: 'desc' }
         });
-        for (const product of products) {
+        // ─── OPTIMISED: process 5 products concurrently instead of 1-by-1 ───
+        const BATCH_SIZE = 5;
+        const processSingleProduct = async (product) => {
             try {
                 // Find appropriate metal rate
                 const metalRate = metalRates.find(r => r.metal === product.metal &&
@@ -2303,7 +2305,7 @@ app.post('/api/settings/apply-to-all', async (req, res) => {
                 if (!metalRate) {
                     errors.push({ sku: product.sku, error: 'No metal rate found' });
                     errorCount++;
-                    continue;
+                    return;
                 }
                 // Get stone rate if needed (legacy support)
                 let stoneRate = null;
@@ -2362,18 +2364,21 @@ app.post('/api/settings/apply-to-all', async (req, res) => {
                     });
                 }
                 successCount++;
-                // Delay every 10 products
-                if (successCount % 10 === 0) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    console.log(`   Progress: ${successCount}/${products.length}`);
-                }
             }
             catch (error) {
                 console.error(`   Error: ${product.sku}:`, error.message);
                 errors.push({ sku: product.sku, error: error.message });
                 errorCount++;
             }
+        };
+
+        // Process in batches of BATCH_SIZE concurrently
+        for (let i = 0; i < products.length; i += BATCH_SIZE) {
+            const batch = products.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(processSingleProduct));
+            console.log(`   ⚡ Progress: ${Math.min(i + BATCH_SIZE, products.length)}/${products.length}`);
         }
+
         console.log(`✅ Applied to ${successCount} products`);
         res.json({
             success: true,
