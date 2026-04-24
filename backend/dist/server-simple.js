@@ -429,16 +429,48 @@ app.post('/api/rates/update', async (req, res) => {
             return res.status(404).json({ error: 'Shop not found' });
         }
         const { metal, karat, ratePerGram, reason } = req.body;
-        const newRate = await prisma.metalRate.create({
-            data: {
-                shopId: shop.id,
-                metal,
-                karat: karat || null,
-                ratePerGram: parseFloat(ratePerGram),
-                rateSource: 'manual',
-                reason,
-            },
+        
+        // Find ALL existing rates for this metal/karat
+        const oldRates = await prisma.metalRate.findMany({
+            where: { shopId: shop.id, metal, karat: karat || null },
+            orderBy: { updatedAt: 'desc' }
         });
+        
+        let newRate;
+        if (oldRates.length > 0) {
+            // Update the newest one
+            newRate = await prisma.metalRate.update({
+                where: { id: oldRates[0].id },
+                data: {
+                    ratePerGram: parseFloat(ratePerGram),
+                    rateSource: 'manual',
+                    reason,
+                    updatedBy: shop.domain || 'system'
+                }
+            });
+            
+            // Self-Heal: Delete any ghost duplicates
+            if (oldRates.length > 1) {
+                const idsToDelete = oldRates.slice(1).map(r => r.id);
+                await prisma.metalRate.deleteMany({
+                    where: { id: { in: idsToDelete } }
+                });
+                console.log(`🧹 Cleaned up ${idsToDelete.length} ghost rates for ${metal} ${karat || ''}`);
+            }
+        } else {
+            // Create a completely new rate
+            newRate = await prisma.metalRate.create({
+                data: {
+                    shopId: shop.id,
+                    metal,
+                    karat: karat || null,
+                    ratePerGram: parseFloat(ratePerGram),
+                    rateSource: 'manual',
+                    reason,
+                    updatedBy: shop.domain || 'system'
+                },
+            });
+        }
         console.log(`✅ Updated ${metal} ${karat ? karat + 'K' : ''} rate to ₹${ratePerGram}/g`);
         // Log audit
         await logAudit(shop.id, 'rate_update', 'metal_rate', newRate.id, { newValue: newRate }, reason);
