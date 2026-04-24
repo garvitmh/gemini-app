@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Spinner, Badge, Tooltip, Icon, Text, Box, InlineStack } from '@shopify/polaris';
-import { AlertCircleIcon, CheckCircleIcon, RefreshIcon } from '@shopify/polaris-icons';
+import { useEffect, useState, useRef } from 'react';
+import { Spinner, Badge, Tooltip, Icon, Text, InlineStack } from '@shopify/polaris';
+import { AlertCircleIcon, CheckCircleIcon } from '@shopify/polaris-icons';
 import api from '../utils/api';
 
 interface SyncCounts {
@@ -23,7 +23,7 @@ interface SyncJob {
 export const SyncStatusIndicator = () => {
     const [job, setJob] = useState<SyncJob | null>(null);
     const [counts, setCounts] = useState<SyncCounts | null>(null);
-    const pollInterval = useRef<NodeJS.Timeout | null>(null);
+    const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
     const [isVisible, setIsVisible] = useState(false);
 
     const fetchStatus = async () => {
@@ -115,7 +115,7 @@ export const SyncStatusIndicator = () => {
                     </Text>
                     {counts && (
                         <Badge tone="success">
-                            +{counts.created} / ~{counts.updated}
+                            +{String(counts.created)} / ~{String(counts.updated)}
                         </Badge>
                     )}
                 </InlineStack>

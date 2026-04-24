@@ -789,7 +789,7 @@ export default function Products() {
         setEditIsManualGemstonePrice(product.isManualGemstonePrice || false);
         setEditManualGemstoneWeight(product.manualGemstoneWeight?.toString() || '');
         setEditManualGemstonePrice(product.manualGemstonePrice?.toString() || '');
-        setEditGrossGoldWeight(product.grossGoldWeight || 0);
+        setEditGrossGoldWeight(product.grossGoldWeight?.toString() || '0');
         setEditAutoGrossGoldWeight(product.autoGrossGoldWeight || false);
         setEditWastagePct(product.wastagePct !== undefined ? product.wastagePct : null);
         setEditGstPct(product.gstPct !== undefined ? product.gstPct : null);
@@ -1161,20 +1161,19 @@ export default function Products() {
                 '',
                 '',
                 <div key={groupId} style={{ padding: '8px 0', minWidth: '280px' }}>
-                    <Button
-                        plain
-                        onClick={() => toggleGroup(groupId)}
-                        icon={isExpanded ? ChevronDownIcon : ChevronRightIcon}
-                    >
-                        <InlineStack align="start" gap="300" blockAlign="center">
-                            <div style={{ whiteSpace: 'normal', textAlign: 'left', maxWidth: '400px' }}>
-                                <Text as="span" variant="bodyLg" fontWeight="semibold">{baseName}</Text>
-                            </div>
-                            <div style={{ flexShrink: 0 }}>
-                                <Badge tone="info">{`${groupProducts.length} variants`}</Badge>
-                            </div>
-                        </InlineStack>
-                    </Button>
+                    <InlineStack align="start" gap="300" blockAlign="center">
+                        <Button
+                            plain
+                            onClick={() => toggleGroup(groupId)}
+                            icon={isExpanded ? ChevronDownIcon : ChevronRightIcon}
+                        />
+                        <div style={{ whiteSpace: 'normal', textAlign: 'left', maxWidth: '400px', cursor: 'pointer' }} onClick={() => toggleGroup(groupId)}>
+                            <Text as="span" variant="bodyLg" fontWeight="semibold">{baseName}</Text>
+                        </div>
+                        <div style={{ flexShrink: 0 }}>
+                            <Badge tone="info">{`${groupProducts.length} variants`}</Badge>
+                        </div>
+                    </InlineStack>
                 </div>,
                 '', '', '', '', '', '',
             ]);
@@ -1227,47 +1226,7 @@ export default function Products() {
 
 
 
-    const renderProductRow = (product: Product, isChild: boolean) => {
-        const simplifiedIndentStyle = isChild ? {
-            paddingLeft: '24px',
-            borderLeft: '2px solid #dfe3e8',
-            marginLeft: '12px'
-        } : {};
 
-        const displayName = product.title;
-
-        return [
-            '',
-            <div key={`${product.id}-img`} style={simplifiedIndentStyle}>
-                <InlineStack gap="200" align="start" blockAlign="center">
-                    <Thumbnail
-                        source={product.imageUrl || 'https://via.placeholder.com/50'}
-                        alt={product.title}
-                        size="small"
-                    />
-                </InlineStack>
-            </div>,
-            <Badge key={`${product.id}-status`} tone={product.status === 'active' ? 'success' : product.status === 'draft' ? 'attention' : 'info'}>
-                {product.status || 'unknown'}
-            </Badge>,
-            <Text key={`${product.id}-sku`} as="span" variant="bodySm" tone="subdued">{product.sku || '-'}</Text>,
-            <Text key={`${product.id}-title`} as="span" variant="bodyMd" tone={isChild ? 'subdued' : 'base'}>
-                {displayName}
-                {product.variantTitle && product.variantTitle !== 'Default Title' && (
-                    <Text as="span" tone="subdued"> - {product.variantTitle}</Text>
-                )}
-            </Text>,
-            product.metal || '-',
-            product.metal === 'gold' && product.karat ? `${product.karat}K` : (product.karat ? `${product.karat}` : '-'),
-            product.weightGrams ? `${product.weightGrams}g` : '-',
-            product.gemstoneType || (product.gemstones && product.gemstones.length > 0 ? product.gemstones[0].gemstoneType : '-'),
-            formatCurrency(product.currentPrice || 0),
-            <InlineStack key={`${product.id}-actions`} gap="200">
-                <Button icon={EditIcon} onClick={() => handleEditProduct(product)} />
-                <Button tone="critical" icon={DeleteIcon} onClick={() => handleDeleteProduct(product.id)} />
-            </InlineStack>
-        ];
-    };
 
     // Memoized grouping is already defined above
 

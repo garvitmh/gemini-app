@@ -343,7 +343,7 @@ export default function MakingGroups() {
         getTypeLabel(group.type),
         formatValue(group.type, group.value),
         <Button size="slim" onClick={() => handleManageProducts(group)}>
-            {group._count?.products || 0} products
+            {String(group._count?.products || 0)} products
         </Button>,
         <ButtonGroup>
             <Button size="slim" onClick={() => handleEdit(group)}>
@@ -514,7 +514,6 @@ export default function MakingGroups() {
                         onAction: () => setShowAssignModal(false),
                     },
                 ]}
-                large
             >
                 <Modal.Section>
                     <BlockStack gap="400">
@@ -593,7 +592,7 @@ export default function MakingGroups() {
                                             {isDisabled && (
                                                 <Tooltip content={`Already assigned to: ${product.assignedGroupName}`}>
                                                     <Badge tone="warning">
-                                                        Assigned to {product.assignedGroupName}
+                                                        Assigned to {product.assignedGroupName || ''}
                                                     </Badge>
                                                 </Tooltip>
                                             )}

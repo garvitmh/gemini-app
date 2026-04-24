@@ -19,7 +19,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [syncMessage, setSyncMessage] = useState('');
     const [startedAt, setStartedAt] = useState<Date | null>(null);
     const [completedAt, setCompletedAt] = useState<Date | null>(null);
-    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingStartTimeRef = useRef<number | null>(null);
     const MAX_POLLING_DURATION_MS = 10 * 60 * 1000; // FIX BUG-27: 10 minute timeout
 
