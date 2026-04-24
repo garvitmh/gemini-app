@@ -115,7 +115,7 @@ export const SyncStatusIndicator = () => {
                     </Text>
                     {counts && (
                         <Badge tone="success">
-                            +{String(counts.created)} / ~{String(counts.updated)}
+                            {`+${counts.created} / ~${counts.updated}`}
                         </Badge>
                     )}
                 </InlineStack>

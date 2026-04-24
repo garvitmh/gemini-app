@@ -1163,7 +1163,7 @@ export default function Products() {
                 <div key={groupId} style={{ padding: '8px 0', minWidth: '280px' }}>
                     <InlineStack align="start" gap="300" blockAlign="center">
                         <Button
-                            plain
+                            variant="plain"
                             onClick={() => toggleGroup(groupId)}
                             icon={isExpanded ? ChevronDownIcon : ChevronRightIcon}
                         />

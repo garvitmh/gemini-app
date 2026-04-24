@@ -592,7 +592,7 @@ export default function MakingGroups() {
                                             {isDisabled && (
                                                 <Tooltip content={`Already assigned to: ${product.assignedGroupName}`}>
                                                     <Badge tone="warning">
-                                                        Assigned to {product.assignedGroupName || ''}
+                                                        {`Assigned to ${product.assignedGroupName || ''}`}
                                                     </Badge>
                                                 </Tooltip>
                                             )}
