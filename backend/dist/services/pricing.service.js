@@ -223,15 +223,30 @@ class PricingService {
         }
         const finalPrice = Math.round(Math.max(0, subtotalPlusGst - globalDiscountAmount - productDiscountAmount) * 100) / 100;
         // Derive gemstone name for single-gemstone display
+        // Calculate True Gross Weight for Display
+        let stonesWeightGrams = 0;
+        if (product.gemstones && product.gemstones.length > 0) {
+            stonesWeightGrams = product.gemstones.reduce((sum, g) => {
+                let w = g.gemstoneWeight || 0;
+                let unit = g.unitType || 'carat';
+                return sum + (unit === 'gram' ? w : w * 0.2);
+            }, 0);
+        } else if (product.stoneWeightCarat) {
+            stonesWeightGrams = product.stoneWeightCarat * 0.2;
+        }
+        let calculatedGrossWeight = (product.weightGrams || 0) + stonesWeightGrams + (product.enamelWeightGrams || 0);
+        let finalGrossWeight = (product.grossGoldWeight && product.grossGoldWeight > 0) ? product.grossGoldWeight : calculatedGrossWeight;
+
         const gemNameForBreakdown = firstGemName || (product.gemstoneType ? (0, gemstoneDisplay_1.getGemstoneDisplayName)(product.gemstoneType) : 'Gemstone');
+
         return {
             price: finalPrice,
             breakdown: {
                 metal: product.metal,
                 karat: product.karat,
                 weight: weight,
-                gross_weight: product.grossGoldWeight,
-                net_weight: product.weightGrams,
+                gross_weight: Math.round(finalGrossWeight * 1000) / 1000,
+                net_weight: product.weightGrams || weight,
                 metal_name: `${product.metal} ${product.karat ? product.karat + 'K' : ''}`,
                 metal_rate: Math.round(ratePerGram * 100),
                 metal_value_original: Math.round(metalValue * 100),
