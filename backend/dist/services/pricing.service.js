@@ -230,6 +230,8 @@ class PricingService {
                 metal: product.metal,
                 karat: product.karat,
                 weight: weight,
+                gross_weight: product.grossGoldWeight,
+                net_weight: product.weightGrams,
                 metal_name: `${product.metal} ${product.karat ? product.karat + 'K' : ''}`,
                 metal_rate: Math.round(ratePerGram * 100),
                 metal_value_original: Math.round(metalValue * 100),

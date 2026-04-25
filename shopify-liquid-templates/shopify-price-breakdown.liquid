@@ -23,18 +23,52 @@
     <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
       <tbody>
         
-        {% comment %} Product Details Overview {% endcomment %}
-        <tr style="border-bottom: 2px solid #e1e3e5; background-color: #fcfcfc;">
-          <td colspan="2" style="padding: 12px 16px;">
-            <div style="margin-bottom: 6px; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Product Details</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; color: #4b5563;">
-              <div><strong style="color: #111827;">Net Weight:</strong> {{ breakdown.weight | default: '0' }} g</div>
-              <div><strong style="color: #111827;">Purity:</strong> {{ breakdown.metal_name | default: 'N/A' }}</div>
-              <div><strong style="color: #111827;">Variant Color:</strong> {{ current_variant.title | replace: 'Default Title', 'Standard' }}</div>
-              <div><strong style="color: #111827;">Wastage:</strong> {{ breakdown.wastage_pct | default: '0' }}%</div>
-            </div>
+        {% comment %} Product Details section in table format {% endcomment %}
+        {% if breakdown.gross_weight and breakdown.gross_weight > 0 %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Gross Weight
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {{ breakdown.gross_weight }} g
           </td>
         </tr>
+        {% endif %}
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Net Weight
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {{ breakdown.net_weight | default: breakdown.weight | default: '0' }} g
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f2f3;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Gold Purity
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {{ breakdown.metal_name | default: 'N/A' }}
+          </td>
+        </tr>
+        {% if current_variant.title != 'Default Title' %}
+        <tr style="border-bottom: 1px solid #e1e3e5;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Metal Color
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            {{ current_variant.title | replace: 'Default Title', 'Standard' }}
+          </td>
+        </tr>
+        {% else %}
+        <tr style="border-bottom: 1px solid #e1e3e5;">
+          <td style="padding: 10px 16px; color: #374151;">
+            Metal Color
+          </td>
+          <td style="padding: 10px 16px; text-align: right; font-weight: 500;">
+            Standard
+          </td>
+        </tr>
+        {% endif %}
 
         {% comment %} Metal Price Row {% endcomment %}
         <tr style="border-bottom: 1px solid #f1f2f3;">
