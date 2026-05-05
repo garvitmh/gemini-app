@@ -22,8 +22,8 @@ const app = (0, express_1.default)();
 // Middleware
 app.use((0, compression_1.default)());
 app.use((0, cors_1.default)());
-app.use(express_1.default.json());
-app.use(express_1.default.urlencoded({ extended: true }));
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
 // Simple auth middleware for development
 app.use('/api/*', (req, res, next) => {
     // Mock Shopify session for local development

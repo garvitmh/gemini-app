@@ -88,7 +88,8 @@ app.use('/webhooks', (req, res, next) => {
     });
     req.on('error', next);
 });
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
 app.use(context_middleware_1.contextMiddleware); // Register context middleware globally
 
 // ==================== SHOPIFY OAUTH ROUTES ====================
