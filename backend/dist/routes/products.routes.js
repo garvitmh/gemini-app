@@ -544,6 +544,12 @@ router.post('/import', async (req, res) => {
                     errors.push({ sku: 'No SKU', error: 'SKU is missing' });
                     continue;
                 }
+                
+                // DEBUG: Log first row keys and making charge fields
+                if (imported.length === 0) {
+                    console.log('[IMPORT] Row keys:', Object.keys(row));
+                }
+                console.log(`[IMPORT] SKU ${SKU} - Making Type: "${row['Making Type']}", Making Value: "${row['Making Value']}"`);
                 const existingProduct = await prisma.product.findFirst({
                     where: { shopId: shop.id, sku: SKU.toString() },
                     include: { gemstones: true, makingGroup: true }
@@ -558,28 +564,42 @@ router.post('/import', async (req, res) => {
                 console.log(`[IMPORT] Found product ID: ${existingProduct.id}, Current Price: ${existingProduct.currentPrice}`);
 
                 // Prepare update data
+                // Normalize row keys for robustness
+                const normalizedRow = {};
+                Object.keys(row).forEach(key => {
+                    normalizedRow[key.trim()] = row[key];
+                });
+
+                // Prepare update data
                 const updateData = {
-                    status: row.Status || existingProduct.status,
-                    metal: (row['Metal Type'] || row.metal || '').toString().toLowerCase(),
-                    karat: parseInt(row['Metal Karat'] || row['Metal Purity'] || row.karat || 0),
-                    weightGrams: parseFloat(row['Metal Weight Net (g)'] || row['Metal Weight (g)'] || row.weightGrams || 0),
-                    grossGoldWeight: parseFloat(row['Metal Weight Gross (g)'] || row['Gross Weight (g)'] || row.grossGoldWeight || 0),
-                    wastagePct: parseFloat(row['Wastage %'] || row.wastagePct || 0),
-                    enamelColor: row['Enamel Color'] || null,
-                    enamelWeightGrams: parseFloat(row['Enamel Weight (g)'] || 0),
-                    enamelDiscountType: row['Enamel Discount Type'] || 'none',
-                    enamelDiscountValue: parseFloat(row['Enamel Discount Value'] || 0),
-                    discountType: row['Product Discount Type'] || row['Discount Type'] || 'none',
-                    discount: parseFloat(row['Product Discount Value'] || row['Discount Value'] || 0),
-                    gstPct: parseFloat(row['GST %'] || existingProduct.gstPct || shopSettings?.defaultGstPct || 3),
-                    stoneWeightCarat: parseFloat(row['Gemstone Weight (ct)'] || row['Stone Weight (ct)'] || row['Number of Psc'] || row.stoneWeightCarat || 0),
-                    stonePieces: parseInt(row['Gemstone Pieces'] || row['Stone Pieces'] || row['Psc'] || row.stonePieces || 0),
+                    status: normalizedRow['Status'] || existingProduct.status,
+                    metal: (normalizedRow['Metal Type'] || normalizedRow['metal'] || '').toString().toLowerCase(),
+                    karat: parseInt(normalizedRow['Metal Karat'] || normalizedRow['Metal Purity'] || normalizedRow['karat'] || 0),
+                    weightGrams: parseFloat(normalizedRow['Metal Weight Net (g)'] || normalizedRow['Metal Weight (g)'] || normalizedRow['weightGrams'] || 0),
+                    grossGoldWeight: parseFloat(normalizedRow['Metal Weight Gross (g)'] || normalizedRow['Gross Weight (g)'] || normalizedRow['grossGoldWeight'] || 0),
+                    wastagePct: parseFloat(normalizedRow['Wastage %'] || normalizedRow['wastagePct'] || 0),
+                    enamelColor: normalizedRow['Enamel Color'] || null,
+                    enamelWeightGrams: parseFloat(normalizedRow['Enamel Weight (g)'] || 0),
+                    enamelDiscountType: normalizedRow['Enamel Discount Type'] || 'none',
+                    enamelDiscountValue: parseFloat(normalizedRow['Enamel Discount Value'] || 0),
+                    discountType: normalizedRow['Product Discount Type'] || normalizedRow['Discount Type'] || 'none',
+                    discount: parseFloat(normalizedRow['Product Discount Value'] || normalizedRow['Discount Value'] || 0),
+                    gstPct: parseFloat(normalizedRow['GST %'] || existingProduct.gstPct || shopSettings?.defaultGstPct || 3),
+                    stoneWeightCarat: parseFloat(normalizedRow['Gemstone Weight (ct)'] || normalizedRow['Stone Weight (ct)'] || normalizedRow['Number of Psc'] || normalizedRow['stoneWeightCarat'] || 0),
+                    stonePieces: parseInt(normalizedRow['Gemstone Pieces'] || normalizedRow['Stone Pieces'] || normalizedRow['Psc'] || normalizedRow['stonePieces'] || 0),
                     // Making charges - from template or preserve existing or use shop defaults
-                    makingChargeType: row['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram',
-                    makingChargeValue: parseFloat(row['Making Value'] || existingProduct.makingChargeValue || shopSettings?.defaultMakingChargeValue || 1500)
+                    makingChargeType: normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram',
+                    makingChargeValue: parseFloat(
+                        (normalizedRow['Making Value'] !== undefined && normalizedRow['Making Value'] !== '') 
+                        ? normalizedRow['Making Value'] 
+                        : (existingProduct.makingChargeValue ?? shopSettings?.defaultMakingChargeValue ?? 1500)
+                    )
                 };
 
-                console.log(`[IMPORT] Update data:`, JSON.stringify(updateData, null, 2));
+                console.log(`[IMPORT] Final Update Data for ${SKU}:`, JSON.stringify({
+                    makingChargeType: updateData.makingChargeType,
+                    makingChargeValue: updateData.makingChargeValue
+                }, null, 2));
 
                 // Update Product Core & Metal & Enamel & Pricing
                 const updatedProduct = await prisma.product.update({
@@ -600,33 +620,33 @@ router.post('/import', async (req, res) => {
                     const prefix = `Stone ${i}: `;
 
                     // Check if stone is used (new format: Source field, old format: Used field)
-                    const source = row[`${prefix}Source`];
-                    const used = row[`${prefix}Used`]?.toString().toUpperCase() === 'TRUE';
+                    const source = normalizedRow[`${prefix}Source`];
+                    const used = normalizedRow[`${prefix}Used`]?.toString().toUpperCase() === 'TRUE';
                     const hasStone = source || used;
 
                     if (hasStone) {
                         // Determine if Master or Custom
                         const isMaster = source?.toLowerCase() === 'master';
-                        const isCustom = source?.toLowerCase() === 'custom' || row[`${prefix}Custom`]?.toString().toUpperCase() === 'TRUE';
+                        const isCustom = source?.toLowerCase() === 'custom' || normalizedRow[`${prefix}Custom`]?.toString().toUpperCase() === 'TRUE';
 
                         const stoneData = {
                             // New format: Master Name or Custom Type, Old format: Type
-                            gemstoneType: isMaster ? row[`${prefix}Master Name`] : (row[`${prefix}Custom Type`] || row[`${prefix}Type`]),
-                            gemstoneShape: row[`${prefix}Shape`],
-                            gemstoneQuality: row[`${prefix}Quality`],
-                            gemstoneColor: row[`${prefix}Color`],
-                            gemstoneClarity: row[`${prefix}Clarity`],
-                            gemstoneCut: row[`${prefix}Cut`],
-                            gemstoneCaratRange: row[`${prefix}Carat Range`],
-                            gemstoneWeight: parseFloat(row[`${prefix}Weight (ct)`] || 0),
-                            gemstonePieces: parseInt(row[`${prefix}Pieces`] || 1),
+                            gemstoneType: isMaster ? normalizedRow[`${prefix}Master Name`] : (normalizedRow[`${prefix}Custom Type`] || normalizedRow[`${prefix}Type`]),
+                            gemstoneShape: normalizedRow[`${prefix}Shape`],
+                            gemstoneQuality: normalizedRow[`${prefix}Quality`],
+                            gemstoneColor: normalizedRow[`${prefix}Color`],
+                            gemstoneClarity: normalizedRow[`${prefix}Clarity`],
+                            gemstoneCut: normalizedRow[`${prefix}Cut`],
+                            gemstoneCaratRange: normalizedRow[`${prefix}Carat Range`],
+                            gemstoneWeight: parseFloat(normalizedRow[`${prefix}Weight (ct)`] || 0),
+                            gemstonePieces: parseInt(normalizedRow[`${prefix}Pieces`] || 1),
                             // Discount fields (new in enhanced template)
-                            discountType: row[`${prefix}Discount Type`] || 'none',
-                            discountValue: parseFloat(row[`${prefix}Discount Value`] || 0),
+                            discountType: normalizedRow[`${prefix}Discount Type`] || 'none',
+                            discountValue: parseFloat(normalizedRow[`${prefix}Discount Value`] || 0),
                             // Rate per piece (new format or old format)
-                            unitType: row[`${prefix}Rate Type`] === 'piece' ? 'piece' : 'carat',
-                            pricePerPiece: row[`${prefix}Rate Type`] === 'piece' ? parseFloat(row[`${prefix}Rate Per Piece`] || row[`${prefix}Rate Value`] || 0) : null,
-                            pricePerCarat: row[`${prefix}Rate Type`] !== 'piece' ? parseFloat(row[`${prefix}Rate Per Carat`] || row[`${prefix}Rate Value`] || 0) : null,
+                            unitType: normalizedRow[`${prefix}Rate Type`] === 'piece' ? 'piece' : 'carat',
+                            pricePerPiece: normalizedRow[`${prefix}Rate Type`] === 'piece' ? parseFloat(normalizedRow[`${prefix}Rate Per Piece`] || normalizedRow[`${prefix}Rate Value`] || 0) : null,
+                            pricePerCarat: normalizedRow[`${prefix}Rate Type`] !== 'piece' ? parseFloat(normalizedRow[`${prefix}Rate Per Carat`] || normalizedRow[`${prefix}Rate Value`] || 0) : null,
                             isCustom: isCustom
                         };
                         stonesToSave.push(stoneData);
@@ -679,13 +699,16 @@ router.post('/import', async (req, res) => {
                     console.log(`[IMPORT] Queuing Shopify sync (async)...`);
 
                     // Fire-and-forget: don't await, let it run in background
-                    pushToShopify(
-                        shop.domain,
-                        shop.accessToken,
-                        refreshedProduct,
-                        priceData.newPrice,
-                        priceData.breakdown
-                    ).then(async (shopifyResult) => {
+                    // Added a small artificial delay to avoid immediate burst that triggers 429
+                    new Promise(resolve => setTimeout(resolve, imported.length * 500)).then(() => {
+                        return pushToShopify(
+                            shop.domain,
+                            shop.accessToken,
+                            refreshedProduct,
+                            priceData.newPrice,
+                            priceData.breakdown
+                        );
+                    }).then(async (shopifyResult) => {
                         if (shopifyResult.success) {
                             console.log(`[IMPORT] ✅ Shopify synced for ${SKU}`);
                             // Update lastPushedPrice and lastPushedAt
@@ -703,7 +726,7 @@ router.post('/import', async (req, res) => {
                         console.error(`[IMPORT] ⚠️  Shopify sync error for ${SKU}:`, error.message);
                     });
 
-                    console.log(`[IMPORT] Continuing with next product (Shopify sync in background)...`);
+                    console.log(`[IMPORT] Continuing with next product (Shopify sync in background with 500ms staggered delay)...`);
                 } else {
                     console.log(`[IMPORT] WARNING: No price results returned for ${SKU}`);
                 }

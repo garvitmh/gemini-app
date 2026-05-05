@@ -222,71 +222,85 @@ class ShopifyService {
 
     // Update variant with full price breakdown — REST for price (reliable) + GraphQL for metafields
     async updateVariantWithBreakdown(variantId, price, breakdown) {
-        try {
-            // Ensure breakdown is an object if possible
-            if (typeof breakdown === 'string') {
-                try {
-                    breakdown = JSON.parse(breakdown);
-                } catch (e) {
-                    // Stay as string if not valid JSON
-                }
-            }
-            console.log(`[SHOPIFY] ⚡ Updating variant ${variantId} → ₹${price.toFixed(2)}`);
-
-            // GID for GraphQL
-            const gid = variantId.startsWith('gid://') ? variantId : `gid://shopify/ProductVariant/${variantId}`;
-            // Numeric ID for REST API
-            const numericId = gid.split('ProductVariant/').pop();
-
-            // ─── Step 1: Update PRICE via REST API (most reliable method) ───
-            const priceRes = await axios_1.default.put(
-                `https://${this.domain}/admin/api/2024-01/variants/${numericId}.json`,
-                { variant: { id: numericId, price: price.toFixed(2) } },
-                { headers: ShopifyService.getHeaders(this.accessToken) }
-            );
-            const confirmedPrice = priceRes.data?.variant?.price;
-            if (!confirmedPrice) {
-                console.error(`[SHOPIFY] ❌ Price update failed for variant ${variantId}`);
-                return { success: false, error: 'Price update failed' };
-            }
-            console.log(`[SHOPIFY] ✓ Price confirmed → ₹${confirmedPrice}`);
-
-            // ─── Step 2: Update METAFIELDS via GraphQL ───
-            if (breakdown) {
-                const breakdownJson = typeof breakdown === 'string' ? breakdown : JSON.stringify(breakdown);
-                const makingChargesFormatted = (breakdown.making_charges / 100).toFixed(2);
-
-                const metafieldMutation = `
-                    mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
-                        metafieldsSet(metafields: $metafields) {
-                            metafields { id key }
-                            userErrors { field message }
-                        }
+        let retries = 0;
+        const maxRetries = 3;
+        
+        const executeUpdate = async () => {
+            try {
+                // Ensure breakdown is an object if possible
+                if (typeof breakdown === 'string') {
+                    try {
+                        breakdown = JSON.parse(breakdown);
+                    } catch (e) {
+                        // Stay as string if not valid JSON
                     }
-                `;
-                const metafieldVariables = {
-                    metafields: [
-                        { ownerId: gid, namespace: "gemini", key: "price_breakdown", value: breakdownJson, type: "json" },
-                        { ownerId: gid, namespace: "custom", key: "price_breakdown", value: breakdownJson, type: "json" },
-                        { ownerId: gid, namespace: "custom", key: "code_form",       value: breakdownJson, type: "json" },
-                        { ownerId: gid, namespace: "custom", key: "makingcharges",   value: makingChargesFormatted, type: "number_decimal" }
-                    ]
-                };
-                const mfRes = await axios_1.default.post(
-                    `https://${this.domain}/admin/api/2024-01/graphql.json`,
-                    { query: metafieldMutation, variables: metafieldVariables },
+                }
+                console.log(`[SHOPIFY] ⚡ Updating variant ${variantId} → ₹${price.toFixed(2)}`);
+
+                // GID for GraphQL
+                const gid = variantId.startsWith('gid://') ? variantId : `gid://shopify/ProductVariant/${variantId}`;
+                // Numeric ID for REST API
+                const numericId = gid.split('ProductVariant/').pop();
+
+                // ─── Step 1: Update PRICE via REST API (most reliable method) ───
+                const priceRes = await axios_1.default.put(
+                    `https://${this.domain}/admin/api/2024-01/variants/${numericId}.json`,
+                    { variant: { id: numericId, price: price.toFixed(2) } },
                     { headers: ShopifyService.getHeaders(this.accessToken) }
                 );
-                const metaErrors = mfRes.data?.data?.metafieldsSet?.userErrors;
-                if (metaErrors?.length) console.error('[SHOPIFY] ❌ Metafield errors:', JSON.stringify(metaErrors));
-                else console.log(`[SHOPIFY] ✓ Metafields updated`);
-            }
+                const confirmedPrice = priceRes.data?.variant?.price;
+                if (!confirmedPrice) {
+                    console.error(`[SHOPIFY] ❌ Price update failed for variant ${variantId}`);
+                    return { success: false, error: 'Price update failed' };
+                }
+                console.log(`[SHOPIFY] ✓ Price confirmed → ₹${confirmedPrice}`);
 
-            return { success: true };
-        } catch (error) {
-            console.error(`[SHOPIFY] Failed to update variant ${variantId}:`, error.message);
-            return { success: false, error: error.message };
-        }
+                // ─── Step 2: Update METAFIELDS via GraphQL ───
+                if (breakdown) {
+                    const breakdownJson = typeof breakdown === 'string' ? breakdown : JSON.stringify(breakdown);
+                    const makingChargesFormatted = (breakdown.making_charges / 100).toFixed(2);
+
+                    const metafieldMutation = `
+                        mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
+                            metafieldsSet(metafields: $metafields) {
+                                metafields { id key }
+                                userErrors { field message }
+                            }
+                        }
+                    `;
+                    const metafieldVariables = {
+                        metafields: [
+                            { ownerId: gid, namespace: "gemini", key: "price_breakdown", value: breakdownJson, type: "json" },
+                            { ownerId: gid, namespace: "custom", key: "price_breakdown", value: breakdownJson, type: "json" },
+                            { ownerId: gid, namespace: "custom", key: "code_form",       value: breakdownJson, type: "json" },
+                            { ownerId: gid, namespace: "custom", key: "makingcharges",   value: makingChargesFormatted, type: "number_decimal" }
+                        ]
+                    };
+                    const mfRes = await axios_1.default.post(
+                        `https://${this.domain}/admin/api/2024-01/graphql.json`,
+                        { query: metafieldMutation, variables: metafieldVariables },
+                        { headers: ShopifyService.getHeaders(this.accessToken) }
+                    );
+                    const metaErrors = mfRes.data?.data?.metafieldsSet?.userErrors;
+                    if (metaErrors?.length) console.error('[SHOPIFY] ❌ Metafield errors:', JSON.stringify(metaErrors));
+                    else console.log(`[SHOPIFY] ✓ Metafields updated`);
+                }
+
+                return { success: true };
+            } catch (error) {
+                if (error.response?.status === 429 && retries < maxRetries) {
+                    const retryAfter = parseInt(error.response.headers['retry-after'] || '2');
+                    console.warn(`[SHOPIFY] ⚠️ Rate limit (429) hit for ${variantId}. Retrying in ${retryAfter}s... (Attempt ${retries + 1}/${maxRetries})`);
+                    retries++;
+                    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                    return executeUpdate();
+                }
+                console.error(`[SHOPIFY] Failed to update variant ${variantId}:`, error.message);
+                return { success: false, error: error.message };
+            }
+        };
+
+        return executeUpdate();
     }
 
     // Restore updateVariantPricesBatch for BulkPriceUpdateService
