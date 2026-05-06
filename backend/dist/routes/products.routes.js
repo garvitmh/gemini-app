@@ -570,23 +570,6 @@ router.post('/import', async (req, res) => {
                     normalizedRow[key.trim()] = row[key];
                 });
 
-                // Prepare update data
-                const updateData = {
-                    status: normalizedRow['Status'] || existingProduct.status,
-                    metal: (normalizedRow['Metal Type'] || normalizedRow['metal'] || '').toString().toLowerCase(),
-                    karat: parseInt(normalizedRow['Metal Karat'] || normalizedRow['Metal Purity'] || normalizedRow['karat'] || 0),
-                    weightGrams: parseFloat(normalizedRow['Metal Weight Net (g)'] || normalizedRow['Metal Weight (g)'] || normalizedRow['weightGrams'] || 0),
-                    grossGoldWeight: parseFloat(normalizedRow['Metal Weight Gross (g)'] || normalizedRow['Gross Weight (g)'] || normalizedRow['grossGoldWeight'] || 0),
-                    wastagePct: parseFloat(normalizedRow['Wastage %'] || normalizedRow['wastagePct'] || 0),
-                    enamelColor: normalizedRow['Enamel Color'] || null,
-                    enamelWeightGrams: parseFloat(normalizedRow['Enamel Weight (g)'] || 0),
-                    enamelDiscountType: normalizedRow['Enamel Discount Type'] || 'none',
-                    enamelDiscountValue: parseFloat(normalizedRow['Enamel Discount Value'] || 0),
-                    discountType: normalizedRow['Product Discount Type'] || normalizedRow['Discount Type'] || 'none',
-                    discount: parseFloat(normalizedRow['Product Discount Value'] || normalizedRow['Discount Value'] || 0),
-                    gstPct: parseFloat(normalizedRow['GST %'] || existingProduct.gstPct || shopSettings?.defaultGstPct || 3),
-                    stoneWeightCarat: parseFloat(normalizedRow['Gemstone Weight (ct)'] || normalizedRow['Stone Weight (ct)'] || normalizedRow['Number of Psc'] || normalizedRow['stoneWeightCarat'] || 0),
-                    stonePieces: parseInt(normalizedRow['Gemstone Pieces'] || normalizedRow['Stone Pieces'] || normalizedRow['Psc'] || normalizedRow['stonePieces'] || 0),
                 let makingType = (normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram').toString().toLowerCase();
                 let makingValue = parseFloat(
                     (normalizedRow['Making Value'] !== undefined && normalizedRow['Making Value'] !== '') 
@@ -600,10 +583,8 @@ router.post('/import', async (req, res) => {
                 if (makingPercentageValue > 0 && (!makingValue || makingValue === 0)) {
                     makingType = 'percent';
                     makingValue = makingPercentageValue;
-                    console.log(`[IMPORT] Switching to percentage-based making charge: ${makingValue}%`);
                 } else if (makingPercentageValue > 0 && makingValue > 0) {
-                    // Both filled - default to Making Value as per user request ("pick the default one")
-                    console.log(`[IMPORT] Both Value and Percentage filled. Picking default (Value): ${makingValue} (${makingType})`);
+                    // Both filled - default to Making Value as per user request
                 }
 
                 // Add making discount fields - using priority logic similar to making charges
@@ -619,13 +600,9 @@ router.post('/import', async (req, res) => {
                 } else if (discountFlatValue > 0) {
                     makingDiscountType = 'flat';
                     makingDiscountValue = discountFlatValue;
-                } else if (normalizedRow['Making Discount Type']) {
-                    // Backward compatibility if they still use the old column
-                    makingDiscountType = normalizedRow['Making Discount Type'];
-                    makingDiscountValue = parseFloat(normalizedRow['Making Discount Value'] || 0);
                 }
 
-                // Prepare update data
+                // Prepare final update data object
                 const updateData = {
                     status: normalizedRow['Status'] || existingProduct.status,
                     metal: (normalizedRow['Metal Type'] || normalizedRow['metal'] || '').toString().toLowerCase(),
