@@ -591,8 +591,23 @@ router.post('/import', async (req, res) => {
                 let makingDiscountType = existingProduct.makingDiscountType || 'none';
                 let makingDiscountValue = parseFloat(existingProduct.makingDiscountValue || 0);
 
-                const discountPctValue = parseFloat(normalizedRow['Making Discount %'] || 0);
-                const discountFlatValue = parseFloat(normalizedRow['Making Discount Value'] || 0);
+                const rawPct = normalizedRow['Making Discount %'];
+                const rawFlat = normalizedRow['Making Discount Value'];
+
+                let discountPctValue = 0;
+                if (rawPct !== undefined && rawPct !== '') {
+                    if (typeof rawPct === 'string' && rawPct.includes('%')) {
+                        discountPctValue = parseFloat(rawPct.replace('%', '').trim());
+                    } else {
+                        discountPctValue = parseFloat(rawPct);
+                        // If it's a decimal like 0.2, treat as 20%
+                        if (discountPctValue > 0 && discountPctValue < 1) {
+                            discountPctValue = discountPctValue * 100;
+                        }
+                    }
+                }
+
+                const discountFlatValue = parseFloat(rawFlat || 0);
 
                 if (discountPctValue > 0) {
                     makingDiscountType = 'percent';
@@ -600,6 +615,10 @@ router.post('/import', async (req, res) => {
                 } else if (discountFlatValue > 0) {
                     makingDiscountType = 'flat';
                     makingDiscountValue = discountFlatValue;
+                } else if (normalizedRow['Making Discount Type']) {
+                    // Backward compatibility
+                    makingDiscountType = normalizedRow['Making Discount Type'];
+                    makingDiscountValue = parseFloat(normalizedRow['Making Discount Value'] || 0);
                 }
 
                 // Prepare final update data object
