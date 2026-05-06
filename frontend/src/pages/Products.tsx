@@ -2097,7 +2097,9 @@ export default function Products() {
                     <BlockStack gap="400">
                         <Text as="p">
                             Upload a CSV or Excel file to bulk update product details.
-                            Supported columns: SKU, weightGrams, metal, karat, etc.
+                            Supported columns: SKU, weightGrams, metal, karat, etc. 
+                            New: Use <strong>Making Percentage</strong> for percentage-based charges, or <strong>Making Value</strong> for per-gram/fixed charges. 
+                            Also supports <strong>Making Discount Value</strong> (flat) and <strong>Making Discount %</strong> (percentage).
                         </Text>
 
                         <div style={{ padding: '20px', border: '2px dashed #ccc', borderRadius: '4px', textAlign: 'center' }}>

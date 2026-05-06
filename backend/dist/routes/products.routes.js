@@ -587,18 +587,72 @@ router.post('/import', async (req, res) => {
                     gstPct: parseFloat(normalizedRow['GST %'] || existingProduct.gstPct || shopSettings?.defaultGstPct || 3),
                     stoneWeightCarat: parseFloat(normalizedRow['Gemstone Weight (ct)'] || normalizedRow['Stone Weight (ct)'] || normalizedRow['Number of Psc'] || normalizedRow['stoneWeightCarat'] || 0),
                     stonePieces: parseInt(normalizedRow['Gemstone Pieces'] || normalizedRow['Stone Pieces'] || normalizedRow['Psc'] || normalizedRow['stonePieces'] || 0),
-                    // Making charges - from template or preserve existing or use shop defaults
-                    makingChargeType: normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram',
-                    makingChargeValue: parseFloat(
-                        (normalizedRow['Making Value'] !== undefined && normalizedRow['Making Value'] !== '') 
-                        ? normalizedRow['Making Value'] 
-                        : (existingProduct.makingChargeValue ?? shopSettings?.defaultMakingChargeValue ?? 1500)
-                    )
+                let makingType = (normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram').toString().toLowerCase();
+                let makingValue = parseFloat(
+                    (normalizedRow['Making Value'] !== undefined && normalizedRow['Making Value'] !== '') 
+                    ? normalizedRow['Making Value'] 
+                    : (existingProduct.makingChargeValue ?? shopSettings?.defaultMakingChargeValue ?? 1500)
+                );
+
+                const makingPercentageValue = parseFloat(normalizedRow['Making Percentage'] || 0);
+                
+                // Logic: If Making Percentage is filled and Making Value is 0 or empty, use percentage
+                if (makingPercentageValue > 0 && (!makingValue || makingValue === 0)) {
+                    makingType = 'percent';
+                    makingValue = makingPercentageValue;
+                    console.log(`[IMPORT] Switching to percentage-based making charge: ${makingValue}%`);
+                } else if (makingPercentageValue > 0 && makingValue > 0) {
+                    // Both filled - default to Making Value as per user request ("pick the default one")
+                    console.log(`[IMPORT] Both Value and Percentage filled. Picking default (Value): ${makingValue} (${makingType})`);
+                }
+
+                // Add making discount fields - using priority logic similar to making charges
+                let makingDiscountType = existingProduct.makingDiscountType || 'none';
+                let makingDiscountValue = parseFloat(existingProduct.makingDiscountValue || 0);
+
+                const discountPctValue = parseFloat(normalizedRow['Making Discount %'] || 0);
+                const discountFlatValue = parseFloat(normalizedRow['Making Discount Value'] || 0);
+
+                if (discountPctValue > 0) {
+                    makingDiscountType = 'percent';
+                    makingDiscountValue = discountPctValue;
+                } else if (discountFlatValue > 0) {
+                    makingDiscountType = 'flat';
+                    makingDiscountValue = discountFlatValue;
+                } else if (normalizedRow['Making Discount Type']) {
+                    // Backward compatibility if they still use the old column
+                    makingDiscountType = normalizedRow['Making Discount Type'];
+                    makingDiscountValue = parseFloat(normalizedRow['Making Discount Value'] || 0);
+                }
+
+                // Prepare update data
+                const updateData = {
+                    status: normalizedRow['Status'] || existingProduct.status,
+                    metal: (normalizedRow['Metal Type'] || normalizedRow['metal'] || '').toString().toLowerCase(),
+                    karat: parseInt(normalizedRow['Metal Karat'] || normalizedRow['Metal Purity'] || normalizedRow['karat'] || 0),
+                    weightGrams: parseFloat(normalizedRow['Metal Weight Net (g)'] || normalizedRow['Metal Weight (g)'] || normalizedRow['weightGrams'] || 0),
+                    grossGoldWeight: parseFloat(normalizedRow['Metal Weight Gross (g)'] || normalizedRow['Gross Weight (g)'] || normalizedRow['grossGoldWeight'] || 0),
+                    wastagePct: parseFloat(normalizedRow['Wastage %'] || normalizedRow['wastagePct'] || 0),
+                    enamelColor: normalizedRow['Enamel Color'] || null,
+                    enamelWeightGrams: parseFloat(normalizedRow['Enamel Weight (g)'] || 0),
+                    enamelDiscountType: normalizedRow['Enamel Discount Type'] || 'none',
+                    enamelDiscountValue: parseFloat(normalizedRow['Enamel Discount Value'] || 0),
+                    discountType: normalizedRow['Product Discount Type'] || normalizedRow['Discount Type'] || 'none',
+                    discount: parseFloat(normalizedRow['Product Discount Value'] || normalizedRow['Discount Value'] || 0),
+                    gstPct: parseFloat(normalizedRow['GST %'] || existingProduct.gstPct || shopSettings?.defaultGstPct || 3),
+                    stoneWeightCarat: parseFloat(normalizedRow['Gemstone Weight (ct)'] || normalizedRow['Stone Weight (ct)'] || normalizedRow['Number of Psc'] || normalizedRow['stoneWeightCarat'] || 0),
+                    stonePieces: parseInt(normalizedRow['Gemstone Pieces'] || normalizedRow['Stone Pieces'] || normalizedRow['Psc'] || normalizedRow['stonePieces'] || 0),
+                    makingChargeType: makingType,
+                    makingChargeValue: makingValue,
+                    makingDiscountType: makingDiscountType,
+                    makingDiscountValue: makingDiscountValue
                 };
 
                 console.log(`[IMPORT] Final Update Data for ${SKU}:`, JSON.stringify({
                     makingChargeType: updateData.makingChargeType,
-                    makingChargeValue: updateData.makingChargeValue
+                    makingChargeValue: updateData.makingChargeValue,
+                    makingDiscountType: updateData.makingDiscountType,
+                    makingDiscountValue: updateData.makingDiscountValue
                 }, null, 2));
 
                 // Update Product Core & Metal & Enamel & Pricing
@@ -815,6 +869,9 @@ router.get('/template', async (req, res) => {
             // Making Charges
             'Making Type': 'per_gram',
             'Making Value': '1500',
+            'Making Percentage': '10',
+            'Making Discount Value': '0',
+            'Making Discount %': '0',
 
             // Product Discount
             'Product Discount Type': 'flat',
@@ -894,7 +951,10 @@ router.get('/export', async (req, res) => {
             row['Enamel Discount Type'] = p.enamelDiscountType || 'none';
             row['Enamel Discount Value'] = p.enamelDiscountValue || 0;
             row['Making Type'] = p.makingChargeType || '';
-            row['Making Value'] = p.makingChargeValue || '';
+            row['Making Value'] = p.makingChargeType !== 'percent' ? (p.makingChargeValue || '') : '';
+            row['Making Percentage'] = p.makingChargeType === 'percent' ? (p.makingChargeValue || '') : '';
+            row['Making Discount Value'] = p.makingDiscountType === 'flat' ? (p.makingDiscountValue || '') : '';
+            row['Making Discount %'] = p.makingDiscountType === 'percent' ? (p.makingDiscountValue || '') : '';
             row['Discount Type'] = p.discountType || 'none';
             row['Discount Value'] = p.discount || 0;
             row['GST %'] = p.gstPct || 3;
