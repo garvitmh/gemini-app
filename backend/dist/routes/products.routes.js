@@ -939,7 +939,19 @@ router.get('/export', async (req, res) => {
             row['Last Synced'] = p.updatedAt.toISOString().split('T')[0];
             return row;
         });
-        const worksheet = XLSX.utils.json_to_sheet(rows);
+        // Define explicit headers to ensure order and visibility
+        const headers = [
+            'SKU', 'Title', 'Status', 'Collection', 'Metal Type', 'Metal Purity', 
+            'Metal Weight (g)', 'Gross Weight (g)', 'Wastage %',
+            'Stone 1: Used', 'Stone 1: Type', 'Stone 1: Shape', 'Stone 1: Quality', 'Stone 1: Color', 'Stone 1: Clarity', 'Stone 1: Cut', 'Stone 1: Weight (ct)', 'Stone 1: Pieces', 'Stone 1: Rate Type', 'Stone 1: Rate Value', 'Stone 1: Custom',
+            'Stone 2: Used', 'Stone 2: Type', 'Stone 2: Shape', 'Stone 2: Quality', 'Stone 2: Color', 'Stone 2: Clarity', 'Stone 2: Cut', 'Stone 2: Weight (ct)', 'Stone 2: Pieces', 'Stone 2: Rate Type', 'Stone 2: Rate Value', 'Stone 2: Custom',
+            'Stone 3: Used', 'Stone 3: Type', 'Stone 3: Shape', 'Stone 3: Quality', 'Stone 3: Color', 'Stone 3: Clarity', 'Stone 3: Cut', 'Stone 3: Weight (ct)', 'Stone 3: Pieces', 'Stone 3: Rate Type', 'Stone 3: Rate Value', 'Stone 3: Custom',
+            'Enamel Color', 'Enamel Weight (g)', 'Enamel Discount Type', 'Enamel Discount Value',
+            'Making Type', 'Making Value', 'Making Percentage', 'Making Discount Value', 'Making Discount %',
+            'Discount Type', 'Discount Value', 'GST %', 'Current Price', 'Last Synced'
+        ];
+
+        const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
         const format = req.query.format || 'xlsx';
         if (format === 'csv') {
             const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
