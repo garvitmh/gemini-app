@@ -45,7 +45,22 @@ class PricingService {
         }
         // Use product-level gstPct first, fallback to shop settings
         const gstPct = (product.gstPct !== undefined && product.gstPct !== null) ? product.gstPct : (settings?.defaultGstPct ?? 3);
-        const wastageAmount = metalValueRaw * (wastagePct / 100);
+        
+        // --- NEW WASTAGE LOGIC ---
+        let wastageAmount = 0;
+        let resolvedWastagePct = wastagePct;
+        
+        if (product.wastageType === 'per_gram') {
+            wastageAmount = (product.wastageValue || 0) * ratePerGram;
+            resolvedWastagePct = (weight > 0) ? (wastageAmount / metalValueRaw) * 100 : 0;
+        } else {
+            const currentWastagePct = (product.wastageType === 'percent' && product.wastageValue != null) 
+                ? product.wastageValue 
+                : wastagePct;
+            resolvedWastagePct = currentWastagePct;
+            wastageAmount = metalValueRaw * (currentWastagePct / 100);
+        }
+
         const metalValue = metalValueRaw + wastageAmount;
         // Helper for discounts
         const applyDiscount = (original, type, value) => {
@@ -62,8 +77,8 @@ class PricingService {
         const metalDiscValue = product.metalDiscountValue ?? settings.defaultMetalDiscountValue;
         const finalMetalValue = applyDiscount(metalValue, metalDiscType, metalDiscValue);
         // 4. Making Charge Calculation
-        // IMPORTANT: Always use the same resolved weight for making charges for consistency
-        const makingChargeWeight = weight;
+        // IMPORTANT: Select weight based on labourFromWeight setting (default to net weight if not specified)
+        const makingChargeWeight = (product.labourFromWeight === 'gross') ? weight : (product.weightGrams || weight);
 
         let makingCharge = 0;
         if (makingChargeType === 'per_gram') {
@@ -259,7 +274,7 @@ class PricingService {
                 gemstone_name: gemNameForBreakdown, // FIX: was missing
                 enamel_price: Math.round(finalEnamelCost * 100),
                 wastage_amount: Math.round(wastageAmount * 100),
-                wastage_pct: wastagePct,
+                wastage_pct: Math.round(resolvedWastagePct * 100) / 100,
                 making_charge_type: makingChargeType,
                 making_charge_rate: makingChargeValue,
                 gemstone_details: stoneDetails,

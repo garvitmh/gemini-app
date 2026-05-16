@@ -1307,6 +1307,12 @@ const PRODUCT_TEMPLATE_COLUMNS = [
     'Discount Type',
     'Discount Value',
     'GST %',
+    // Making Charges
+    'Labour Type',
+    'Labour Value',
+    'Labour From',
+    'Wastage From',
+    'Wastage Value',
     // System / Read-only
     'Current Price',
     'Last Synced'
@@ -1437,6 +1443,12 @@ app.get('/api/products/export', async (req, res) => {
             set('Discount Type', p.discountType);
             set('Discount Value', p.discount);
             set('GST %', p.gstPct);
+            // Making Charges
+            set('Labour Type', p.makingChargeType);
+            set('Labour Value', p.makingChargeValue);
+            set('Labour From', p.labourFromWeight);
+            set('Wastage From', p.wastageType);
+            set('Wastage Value', p.wastageValue);
             // System
             set('Current Price', p.currentPrice);
             set('Last Synced', p.lastPushedAt ? new Date(p.lastPushedAt).toISOString().split('T')[0] : '');
@@ -1589,17 +1601,24 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
                 const title = getColumnValue(row, 'Title', 'title');
                 const wastagePct = getColumnValue(row, 'Wastage %', 'wastagePct', 'Wastage');
                 const gstPct = getColumnValue(row, 'GST %', 'gstPct', 'GST');
+                
                 // Enamel
                 const enamelColor = getColumnValue(row, 'Enamel Color', 'enamelColor');
                 const enamelWeight = getColumnValue(row, 'Enamel Weight (g)', 'enamelWeightGrams');
                 const enamelDiscType = getColumnValue(row, 'Enamel Discount Type', 'enamelDiscountType');
                 const enamelDiscVal = getColumnValue(row, 'Enamel Discount Value', 'enamelDiscountValue');
+                
                 // Discount
                 const discType = getColumnValue(row, 'Discount Type', 'discountType');
                 const discVal = getColumnValue(row, 'Discount Value', 'discount');
-                // Legacy Making charge handling (Backward Compat only)
-                const makingChargeType = getColumnValue(row, 'Making Charge Type', 'makingChargeType');
-                const makingChargeValue = getColumnValue(row, 'Making Charge Value', 'makingChargeValue');
+
+                // Making Charges
+                const labourType = getColumnValue(row, 'Labour Type', 'makingChargeType');
+                const labourValue = getColumnValue(row, 'Labour Value', 'makingChargeValue');
+                const labourFrom = getColumnValue(row, 'Labour From', 'labourFromWeight');
+                const wastageFrom = getColumnValue(row, 'Wastage From', 'wastageType');
+                const wastageValue = getColumnValue(row, 'Wastage Value', 'wastageValue');
+
                 if (weightGrams !== undefined)
                     updateData.weightGrams = toNum(weightGrams);
                 if (grossWeight !== undefined)
@@ -1614,6 +1633,7 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
                     updateData.wastagePct = toNum(wastagePct);
                 if (gstPct !== undefined)
                     updateData.gstPct = toNum(gstPct);
+
                 // Enamel Update
                 if (enamelColor !== undefined)
                     updateData.enamelColor = String(enamelColor).trim();
@@ -1623,16 +1643,24 @@ app.post('/api/products/import', upload.single('file'), async (req, res) => {
                     updateData.enamelDiscountType = String(enamelDiscType).trim();
                 if (enamelDiscVal !== undefined)
                     updateData.enamelDiscountValue = toNum(enamelDiscVal);
+                
                 // Discount Update
                 if (discType !== undefined)
                     updateData.discountType = String(discType).trim();
                 if (discVal !== undefined)
                     updateData.discount = toNum(discVal);
-                // Making charge handling (Legacy)
-                if (makingChargeType !== undefined)
-                    updateData.makingChargeType = makingChargeType;
-                if (makingChargeValue !== undefined)
-                    updateData.makingChargeValue = toNum(makingChargeValue);
+
+                // Making charge handling
+                if (labourType !== undefined)
+                    updateData.makingChargeType = String(labourType).trim().toLowerCase();
+                if (labourValue !== undefined)
+                    updateData.makingChargeValue = toNum(labourValue);
+                if (labourFrom !== undefined)
+                    updateData.labourFromWeight = String(labourFrom).trim().toLowerCase();
+                if (wastageFrom !== undefined)
+                    updateData.wastageType = String(wastageFrom).trim().toLowerCase();
+                if (wastageValue !== undefined)
+                    updateData.wastageValue = toNum(wastageValue);
                 // Gemstone fields (legacy support)
                 if (row.gemstoneType !== undefined)
                     updateData.gemstoneType = row.gemstoneType;
@@ -1914,7 +1942,11 @@ app.put('/api/products/:id', async (req, res) => {
                 isManualGemstonePrice: req.body.isManualGemstonePrice || false,
                 manualGemstoneWeight: req.body.manualGemstoneWeight ? parseFloat(req.body.manualGemstoneWeight) : null,
                 manualGemstonePrice: req.body.manualGemstonePrice ? parseFloat(req.body.manualGemstonePrice) : null,
+                makingChargeType: req.body.makingChargeType || null,
                 makingChargeValue: req.body.makingChargeValue !== undefined ? parseFloat(req.body.makingChargeValue) : null,
+                labourFromWeight: req.body.labourFromWeight || 'net',
+                wastageType: req.body.wastageType || null,
+                wastageValue: req.body.wastageValue !== undefined ? parseFloat(req.body.wastageValue) : null,
                 metalDiscountType: req.body.metalDiscountType || null,
                 metalDiscountValue: req.body.metalDiscountValue !== undefined ? parseFloat(req.body.metalDiscountValue) : null,
                 makingDiscountType: req.body.makingDiscountType || null,

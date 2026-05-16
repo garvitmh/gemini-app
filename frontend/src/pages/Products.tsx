@@ -100,6 +100,9 @@ interface Product {
     makingGroup?: { name: string } | null;
     wastagePct?: number;
     gstPct?: number;
+    labourFromWeight?: string;
+    wastageType?: string;
+    wastageValue?: number;
 }
 
 interface MakingGroup {
@@ -208,6 +211,9 @@ export default function Products() {
     const [editMakingChargeValue, setEditMakingChargeValue] = useState('');
     const [makingGroups, setMakingGroups] = useState<MakingGroup[]>([]);
     const [editMakingGroupId, setEditMakingGroupId] = useState('');
+    const [editLabourFromWeight, setEditLabourFromWeight] = useState('net');
+    const [editWastageType, setEditWastageType] = useState('percent');
+    const [editWastageValue, setEditWastageValue] = useState('');
 
     // Discount Overrides
     const [editMetalDiscountType, setEditMetalDiscountType] = useState('none');
@@ -785,6 +791,9 @@ export default function Products() {
         setEditMakingChargeType(product.makingChargeType || '');
         setEditMakingChargeValue(product.makingChargeValue?.toString() || '');
         setEditMakingGroupId(product.makingGroupId || '');
+        setEditLabourFromWeight(product.labourFromWeight || 'net');
+        setEditWastageType(product.wastageType || 'percent');
+        setEditWastageValue(product.wastageValue?.toString() || '');
 
         setEditIsManualGemstonePrice(product.isManualGemstonePrice || false);
         setEditManualGemstoneWeight(product.manualGemstoneWeight?.toString() || '');
@@ -846,6 +855,9 @@ export default function Products() {
                 makingGroupId: editMakingGroupId || null,
                 makingChargeType: editMakingChargeType || null,
                 makingChargeValue: editMakingChargeValue ? parseFloat(editMakingChargeValue) : undefined,
+                labourFromWeight: editLabourFromWeight,
+                wastageType: editWastageType,
+                wastageValue: editWastageValue ? parseFloat(editWastageValue) : null,
                 metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
                 metalDiscountValue: editMetalDiscountValue ? parseFloat(editMetalDiscountValue) : null,
                 makingDiscountType: editMakingDiscountType !== 'none' ? editMakingDiscountType : null,
@@ -1038,6 +1050,9 @@ export default function Products() {
                     makingGroupId: editMakingGroupId || undefined,
                     makingChargeType: editMakingChargeType,
                     makingChargeValue: editMakingChargeValue,
+                    labourFromWeight: editLabourFromWeight,
+                    wastageType: editWastageType,
+                    wastageValue: editWastageValue ? parseFloat(editWastageValue) : null,
                     metalDiscountType: editMetalDiscountType !== 'none' ? editMetalDiscountType : null,
                     metalDiscountValue: editMetalDiscountValue ? parseFloat(editMetalDiscountValue) : null,
                     makingDiscountType: editMakingDiscountType !== 'none' ? editMakingDiscountType : null,
@@ -1675,46 +1690,88 @@ export default function Products() {
 
                         <Card>
                             <BlockStack gap="400">
-                                <Text as="h3" variant="headingMd">Making Charges Configuration</Text>
+                                <Text as="h3" variant="headingMd">Labour & Wastage Configuration</Text>
 
                                 <Select
-                                    label="Assigned Making Group"
+                                    label="Assigned Making Group (Master)"
                                     options={[
                                         { label: 'None (Use Shop Default)', value: '' },
                                         ...makingGroups.map(g => ({ label: g.name, value: g.id }))
                                     ]}
                                     value={editMakingGroupId}
                                     onChange={setEditMakingGroupId}
-                                    helpText="Select a Making Group to apply its pricing rules. Can be overriden below."
+                                    helpText="Select a Making Group (Master) to apply its pricing rules. Can be overriden below."
                                 />
 
-                                <Text as="h4" variant="headingSm">Override (Optional)</Text>
-                                <Select
-                                    label="Charge Type"
-                                    options={[
-                                        { label: 'Use Shop Default', value: '' },
-                                        { label: 'Per Gram', value: 'per_gram' },
-                                        { label: 'Percentage', value: 'percent' },
-                                        { label: 'Flat Rate', value: 'flat' },
-                                    ]}
-                                    value={editMakingChargeType}
-                                    onChange={setEditMakingChargeType}
-                                />
-                                {editMakingChargeType && (
-                                    <TextField
-                                        label="Value"
-                                        type="number"
-                                        value={editMakingChargeValue}
-                                        onChange={setEditMakingChargeValue}
-                                        autoComplete="off"
-                                        prefix={editMakingChargeType === 'percent' ? '' : '₹'}
-                                        suffix={editMakingChargeType === 'percent' ? '%' : ''}
-                                        helpText={
-                                            editMakingChargeType === 'per_gram' ? '₹ per gram' :
-                                                editMakingChargeType === 'percent' ? '% of metal value' : 'Fixed amount'
-                                        }
+                                <BlockStack gap="400">
+                                    <Text as="h4" variant="headingSm">Labour (Making Charge)</Text>
+                                    <InlineStack gap="400">
+                                        <div style={{ flex: 1 }}>
+                                            <Select
+                                                label="Labour Type"
+                                                options={[
+                                                    { label: 'Use Group/Shop Default', value: '' },
+                                                    { label: 'Per Gram', value: 'per_gram' },
+                                                    { label: 'Percentage (%)', value: 'percent' },
+                                                    { label: 'Flat Rate (₹)', value: 'flat' },
+                                                ]}
+                                                value={editMakingChargeType}
+                                                onChange={setEditMakingChargeType}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <Select
+                                                label="Labour From"
+                                                options={[
+                                                    { label: 'Net Weight', value: 'net' },
+                                                    { label: 'Gross Weight', value: 'gross' },
+                                                ]}
+                                                value={editLabourFromWeight}
+                                                onChange={setEditLabourFromWeight}
+                                                helpText="Weight basis for calculation"
+                                            />
+                                        </div>
+                                    </InlineStack>
+                                    {editMakingChargeType && (
+                                        <TextField
+                                            label="Labour Value"
+                                            type="number"
+                                            value={editMakingChargeValue}
+                                            onChange={setEditMakingChargeValue}
+                                            autoComplete="off"
+                                            prefix={editMakingChargeType === 'percent' ? '' : '₹'}
+                                            suffix={editMakingChargeType === 'percent' ? '%' : ''}
+                                            helpText={
+                                                editMakingChargeType === 'per_gram' ? '₹ per gram' :
+                                                    editMakingChargeType === 'percent' ? '% of metal value' : 'Fixed amount'
+                                            }
+                                        />
+                                    )}
+                                </BlockStack>
+
+                                <BlockStack gap="400">
+                                    <Text as="h4" variant="headingSm">Wastage</Text>
+                                    <Select
+                                        label="Wastage From"
+                                        options={[
+                                            { label: 'Shop Default', value: '' },
+                                            { label: 'Per Gram (Weight)', value: 'per_gram' },
+                                            { label: 'Percentage (%)', value: 'percent' },
+                                        ]}
+                                        value={editWastageType}
+                                        onChange={setEditWastageType}
                                     />
-                                )}
+                                    {(editWastageType === 'per_gram' || editWastageType === 'percent') && (
+                                        <TextField
+                                            label={editWastageType === 'per_gram' ? "Wastage Weight (grams)" : "Wastage Percentage (%)"}
+                                            type="number"
+                                            value={editWastageValue}
+                                            onChange={setEditWastageValue}
+                                            autoComplete="off"
+                                            suffix={editWastageType === 'percent' ? '%' : 'g'}
+                                        />
+                                    )}
+                                </BlockStack>
                             </BlockStack>
                         </Card>
 
