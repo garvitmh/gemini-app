@@ -983,8 +983,48 @@ app.post('/api/making-groups/:id/assign-products', async (req, res) => {
                 },
                 data: {
                     makingGroupId: id,
-                    // DO NOT update any other fields - only makingGroupId
+                    makingChargeType: 'master', // Automatically set to master
                 },
+            });
+
+            // Recalculate price in background so we don't block the UI
+            setImmediate(async () => {
+                try {
+                    console.log(`[ASSIGN] Triggering bulk price recalculation for ${productsToUpdate.length} products...`);
+                    const priceResults = await pricing_service_1.PricingService.calculateBulkPrices(shop.id, productsToUpdate.map(p => p.id));
+                    
+                    if (priceResults.length > 0) {
+                        const shopifyUpdates = priceResults.map(p => {
+                           const prod = productsToUpdate.find(x => x.id === p.productId);
+                           return {
+                               variantId: prod.shopifyVariantId,
+                               price: p.newPrice,
+                               breakdown: p.breakdown
+                           };
+                        });
+                        
+                        // update local database
+                        for (const result of priceResults) {
+                           await prisma.product.update({
+                              where: { id: result.productId },
+                              data: {
+                                  currentPrice: result.newPrice,
+                                  lastCalculatedPrice: result.newPrice,
+                                  lastPushedPrice: result.newPrice,
+                                  lastPushedAt: new Date()
+                              }
+                           });
+                        }
+
+                        // push updates to Shopify
+                        console.log(`[ASSIGN] Pushing updated prices to Shopify...`);
+                        const shopifyService = await shopify_service_1.ShopifyService.forShop(shop.domain);
+                        await shopifyService.updateVariantPricesBatch(shopifyUpdates);
+                        console.log(`[ASSIGN] ✅ Finished updating prices for assigned products.`);
+                    }
+                } catch (e) {
+                   console.error("[ASSIGN] Failed to recalculate prices after assign-products", e);
+                }
             });
         }
         console.log(`✅ Assigned ${productsToUpdate.length} products to making group: ${makingGroup.name}`);
