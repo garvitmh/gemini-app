@@ -31,7 +31,11 @@ class PricingService {
         // 2. Making charge lookup
         let makingChargeType;
         let makingChargeValue;
-        if (product.makingChargeType && product.makingChargeValue !== undefined && product.makingChargeValue !== null && !isNaN(product.makingChargeValue)) {
+        if (product.makingChargeType === 'master') {
+            makingChargeType = 'master';
+            makingChargeValue = (product.makingGroup && product.makingGroup.value !== undefined) ? product.makingGroup.value : 0;
+        }
+        else if (product.makingChargeType && product.makingChargeValue !== undefined && product.makingChargeValue !== null && !isNaN(product.makingChargeValue)) {
             makingChargeType = product.makingChargeType;
             makingChargeValue = product.makingChargeValue;
         }
@@ -89,6 +93,9 @@ class PricingService {
         }
         else if (makingChargeType === 'flat') {
             makingCharge = makingChargeValue;
+        }
+        else if (makingChargeType === 'master') {
+            makingCharge = makingChargeValue * makingChargeWeight;
         }
         else {
             makingCharge = 1500 * makingChargeWeight;

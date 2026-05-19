@@ -570,7 +570,11 @@ router.post('/import', async (req, res) => {
                     normalizedRow[key.trim()] = row[key];
                 });
 
-                let makingType = (normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram').toString().toLowerCase();
+                let rawMakingType = (normalizedRow['Making Type'] || existingProduct.makingChargeType || shopSettings?.defaultMakingChargeType || 'per_gram').toString().toLowerCase().trim();
+                let makingType = rawMakingType;
+                if (rawMakingType === 'per gram') makingType = 'per_gram';
+                else if (rawMakingType === '%' || rawMakingType === 'percentage') makingType = 'percent';
+                else if (rawMakingType === 'custom') makingType = 'flat';
                 let makingValue = parseFloat(
                     (normalizedRow['Making Value'] !== undefined && normalizedRow['Making Value'] !== '') 
                     ? normalizedRow['Making Value'] 
